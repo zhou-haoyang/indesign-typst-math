@@ -24,9 +24,6 @@ const { writeRecord } = require("./label");
 const { neutralize, describeChrome } = require("./frame");
 const { chooseOffset } = require("./baseline");
 
-/** Cached once per session: does a positive anchorYoffset move the object down? */
-let positiveIsDown = null;
-
 /* --------------------------------------------------------------- temp file */
 
 let tempFolder = null;
@@ -86,6 +83,8 @@ let lastTidyFailures = [];
 let lastChrome = "";
 /** The Y offset actually applied, for the status line. */
 let lastOffsetNote = "";
+/** Residual alignment error in points from the most recent inline placement. */
+let lastResidual = null;
 
 function tidyFrame(doc, frame) {
   lastTidyFailures = [];
@@ -127,22 +126,40 @@ function lastOffset() {
   return lastOffsetNote;
 }
 
-function bottomEdge(frame) {
-  // Anchored geometry only settles once the story has been laid out again.
-  try { frame.parentStory.recompose(); } catch { /* not in a story, or no-op */ }
-  return tryGet(() => frame.geometricBounds[2], null);
+/** How far off that placement ended up, in points, or null if unmeasured. */
+function lastAlignmentResidual() {
+  return lastResidual;
 }
 
 /**
- * Shift the object down by `depth` so the maths baseline lands on the text
- * baseline. The decision lives in ./baseline so it can be tested.
+ * The frame's bottom edge and the baseline of the line it is anchored in.
+ *
+ * Both must come from the same settled layout: on a first line the baseline
+ * moves when the object does, so a stale reading of either makes the alignment
+ * unsolvable.
+ */
+function measureAgainstBaseline(frame) {
+  try { frame.parentStory.recompose(); } catch { /* not in a story, or no-op */ }
+  const bottom = tryGet(() => frame.geometricBounds[2], null);
+  const anchor = tryGet(() => frame.storyOffset, null);
+  let baseline = anchor ? tryGet(() => anchor.baseline, null) : null;
+  if (typeof baseline !== "number") baseline = null;
+  // A baseline in a different coordinate space would be worse than none.
+  if (baseline !== null && bottom !== null && Math.abs(bottom - baseline) > 200) {
+    baseline = null;
+  }
+  return { bottom, baseline };
+}
+
+/**
+ * Shift the object so the maths baseline lands on the text baseline. The
+ * decision lives in ./baseline so it can be tested.
  */
 function applyBaselineOffset(frame, depthPt) {
   const settings = tryGet(() => frame.anchoredObjectSettings, null);
   if (!settings) return;
   const result = chooseOffset({
     depthPt,
-    positiveIsDown,
     setOffset: (value) => {
       try {
         settings.anchorYoffset = value;
@@ -151,10 +168,10 @@ function applyBaselineOffset(frame, depthPt) {
         return false;
       }
     },
-    getBottom: () => bottomEdge(frame),
+    measure: () => measureAgainstBaseline(frame),
   });
-  positiveIsDown = result.positiveIsDown;
   lastOffsetNote = result.note;
+  lastResidual = result.residual;
 }
 
 function anchorInline(frame, mode, depthPt) {
@@ -294,4 +311,5 @@ module.exports = {
   lastPlacementWarnings,
   lastFrameChrome,
   lastOffset,
+  lastAlignmentResidual,
 };

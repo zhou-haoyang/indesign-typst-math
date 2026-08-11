@@ -12,7 +12,9 @@
 const { withPoints, asOneUndo, tryGet } = require("./doc");
 const { findAll, makeRecord } = require("./label");
 const { readAt } = require("./context");
-const { prepareAsset, discardAsset, replaceIn, isAnchored } = require("./insert");
+const {
+  prepareAsset, discardAsset, replaceIn, isAnchored, lastAlignmentResidual,
+} = require("./insert");
 
 /**
  * Work out what an existing equation should be rendered as right now.
@@ -89,12 +91,22 @@ async function rerenderAll({ doc, render, preamble, engine, onProgress }) {
   }
 
   let applied = 0;
+  // Alignment is measured per frame; a batch is exactly where a silent
+  // regression would hide, so the worst residual is reported rather than
+  // assumed to be zero.
+  let worstResidual = null;
+  let unmeasured = 0;
   if (jobs.length) {
     asOneUndo("Re-render Typst equations", () => withPoints(doc, () => {
       for (const job of jobs) {
         try {
           replaceIn(doc, job.frame, job.path, job.metrics, job.record);
           applied++;
+          const residual = lastAlignmentResidual();
+          if (residual === null) unmeasured++;
+          else if (worstResidual === null || Math.abs(residual) > Math.abs(worstResidual)) {
+            worstResidual = residual;
+          }
         } catch (err) {
           failures.push({ body: job.record.body, message: String((err && err.message) || err) });
         }
@@ -103,7 +115,7 @@ async function rerenderAll({ doc, render, preamble, engine, onProgress }) {
   }
 
   await Promise.all(jobs.map((job) => discardAsset(job.path)));
-  return { total: found.length, updated: applied, failures };
+  return { total: found.length, updated: applied, failures, worstResidual, unmeasured };
 }
 
 module.exports = { rerenderAll };

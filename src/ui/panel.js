@@ -463,8 +463,12 @@ function wireEvents() {
       const failed = summary.failures.length
         ? `, ${summary.failures.length} failed: ${summary.failures[0].message}`
         : "";
+      const alignment = summary.worstResidual !== null && summary.worstResidual !== undefined
+        ? `, worst alignment ${summary.worstResidual.toFixed(2)} pt`
+        : "";
+      const blind = summary.unmeasured ? `, ${summary.unmeasured} unmeasured` : "";
       setStatus(summary.total
-        ? `Re-rendered ${summary.updated} of ${summary.total}${failed}`
+        ? `Re-rendered ${summary.updated} of ${summary.total}${failed}${alignment}${blind}`
         : "No Typst equations in this document.",
         summary.failures.length ? "error" : "");
     } catch (err) {

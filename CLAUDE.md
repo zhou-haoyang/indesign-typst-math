@@ -94,14 +94,20 @@ Also: Typst's default `bottom-edge` is the baseline, so an auto-height page
 `npm run validate-template` checks this against pixel-measured ink. If you touch
 `webview/template.js`, run it.
 
-Applying that depth needs the sign of `anchorYoffset`, which is not clearly
-documented. It is *measured*, not assumed: at offset 0 InDesign puts the frame's
-bottom edge on the text baseline, so that reading is the baseline, in the same
-coordinate space as `geometricBounds`, and the target is `baseline + depth`.
-`src/id/baseline.js` holds that decision, free of InDesign imports so
-`tools/test-baseline-offset.mjs` can check it converges under either convention.
-The panel reports the applied offset and residual, e.g.
-`Y offset +2.46, off by 0.00 pt`.
+Applying that depth is its own problem, solved by measurement in
+`src/id/baseline.js` (free of InDesign imports, so
+`tools/test-baseline-offset.mjs` can exercise it). Two traps:
+
+- the sign of `anchorYoffset` that means "down" is not clearly documented;
+- **on the first line of a frame the baseline itself moves** when a tall inline
+  object moves, so the frame's own bottom-at-offset-0 is not a usable baseline
+  reference — which is why misalignment appeared on first rows only.
+
+So it reads the real baseline (`frame.storyOffset.baseline`) alongside the
+bounds, probes both signs, and solves from the measured slope. The panel reports
+the applied offset and the residual (`Y offset +2.46, off by 0.00 pt`), and the
+re-render pass reports the worst residual across the document. A non-zero
+residual is the signal to look here.
 
 ### What InDesign will not do
 
