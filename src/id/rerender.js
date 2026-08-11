@@ -9,7 +9,7 @@
  * Everything is compiled and written to disk first, then applied in a single
  * synchronous pass, so the whole sweep is one undo step.
  */
-const { withPoints, asOneUndo, tryGet, isUsable } = require("./doc");
+const { withPoints, asOneUndo, isUsable } = require("./doc");
 const { findAll, makeRecord } = require("./label");
 const { readAt } = require("./context");
 const {

@@ -68,6 +68,20 @@ function isUsable(object) {
   return valid === undefined || valid === null ? true : !!valid;
 }
 
+/**
+ * Compare a DOM value against an enum member.
+ *
+ * UXP enum values do not compare with `===` — `swatch.space` and
+ * `ColorSpace.CMYK` both print "CMYK" and are still not equal. Comparing them
+ * directly silently fails every branch, which is how "match text colour"
+ * managed to render everything black. Verified against a live InDesign; see
+ * tools/probe-indesign.mjs.
+ */
+function sameEnum(value, member) {
+  if (value === null || value === undefined) return false;
+  return String(value) === String(member);
+}
+
 /** Property read that tolerates the DOM throwing instead of returning null. */
 function tryGet(fn, fallback) {
   try {
@@ -86,4 +100,4 @@ function activeDocument() {
   return doc;
 }
 
-module.exports = { withPoints, asOneUndo, tryGet, isUsable, activeDocument };
+module.exports = { withPoints, asOneUndo, tryGet, isUsable, sameEnum, activeDocument };

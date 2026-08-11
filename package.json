@@ -5,9 +5,11 @@
   "private": true,
   "scripts": {
     "setup": "node scripts/vendor.mjs",
-    "validate-template": "python3 tools/validate-template.py",
-    "test:indesign": "node tools/test-indesign.mjs",
-    "check": "node tools/check-requires.mjs && node tools/test-messages.mjs && node tools/test-baseline-offset.mjs"
+    "test": "node tools/run-tests.mjs",
+    "test:all": "node tools/run-tests.mjs all",
+    "test:browser": "node tools/run-tests.mjs browser",
+    "test:app": "node tools/run-tests.mjs app",
+    "probe": "node tools/probe-indesign.mjs"
   },
   "devDependencies": {
     "@myriaddreamin/typst-ts-renderer": "0.7.0",

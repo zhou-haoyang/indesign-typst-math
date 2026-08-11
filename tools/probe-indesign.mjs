@@ -21,7 +21,7 @@
  *   probe(fn)     call fn, reporting {ok, value} or {ok:false, error} —
  *                 the way to ask "does this property even exist?"
  */
-import { idJson, idRaw, inScratchDocument, isAvailable } from "./id.mjs";
+import { idRaw, inScratchDocument, isAvailable } from "./id.mjs";
 
 if (!(await isAvailable())) {
   console.error("InDesign is not running, or is not answering AppleScript.");

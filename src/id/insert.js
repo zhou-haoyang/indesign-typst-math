@@ -237,7 +237,10 @@ function placeFloating(doc, path, metrics) {
 
 /* ------------------------------------------ synchronous core (undo-safe) */
 
-/** Place a new equation. Must run inside asOneUndo + withPoints. */
+/**
+ * Place a new equation. Must run inside asOneUndo + withPoints.
+ * Exported for tools/test-plugin.mjs, which drives it in a live InDesign.
+ */
 function placeNew(doc, path, metrics, record, target) {
   const restore = configurePdfPlacement();
   try {
@@ -309,6 +312,7 @@ module.exports = {
   update,
   prepareAsset,
   discardAsset,
+  placeNew,
   replaceIn,
   lastPlacementWarnings,
   lastFrameChrome,

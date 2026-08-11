@@ -126,4 +126,4 @@ function describe(offset, residual) {
   return `${sign}${Math.abs(offset).toFixed(2)}, off by ${residual.toFixed(2)}`;
 }
 
-module.exports = { chooseOffset, TOLERANCE_PT };
+module.exports = { chooseOffset };

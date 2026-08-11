@@ -16,17 +16,18 @@ only after someone stopped reasoning about InDesign and measured it instead.
 
 ```sh
 npm install && npm run setup   # setup populates vendor/ (~65 MB, gitignored)
-npm run check                  # module resolution, message envelopes, baseline offset (fast)
-npm run validate-template      # depth arithmetic vs pixel-measured ground truth
-node tools/smoke-webview.mjs       # wasm compiler vs the typst CLI
-node tools/smoke-preview.mjs       # message bridge, preview painting, diagnostics
-node tools/smoke-wasm-loading.mjs  # each wasm-loading strategy in isolation
-npm run test:indesign              # geometry, against a live InDesign
+
+npm test              # unit + render suites — no app needed, ~6s
+npm run test:all      # every suite, ~20s
+npm run test:browser  # headless Chrome: wasm, preview, message bridge
+npm run test:app      # the real plugin code, in a live InDesign
+npm run probe         # ask InDesign a question, see below
 ```
 
-Each tool is standalone — run one directly rather than a suite runner. The
-`smoke-*` ones drive headless Chrome via `tools/harness.mjs` and need
-`vendor/` populated; `validate-template` needs the `typst` CLI.
+Suites are split by what they need (`tools/run-tests.mjs`): **unit** needs only
+node, **render** needs the `typst` CLI, **browser** needs headless Chrome and a
+populated `vendor/`, **app** needs InDesign running. Individual tests are
+standalone scripts under `tools/` and can be run directly.
 
 ## Loading into InDesign
 
@@ -75,15 +76,21 @@ Two rules that follow from how those bugs hid:
   `src/id/frame.js`, where the read-back is what exposed that assigning
   `strokeWeight = 0` can *set it to 1*.
 
-### What the automated checks cover
+### What the automated tests cover
 
-`src/` is not loadable by the headless tests: those modules `require("indesign")`,
-which exists only inside InDesign. `npm run check` verifies module resolution,
-message parsing and the baseline solver's logic — not behaviour in the app.
-`npm run test:indesign` covers the placement geometry end to end against the
-live app. `src/ui/` still needs a human reloading the plugin.
+`npm run test:app` runs the **real** `src/id/*` modules inside a live InDesign.
+A UXP script shares the plugin's module system, so `tools/test-plugin.mjs`
+`require`s the actual code rather than reimplementing it — placement, anchoring,
+the baseline solve, labels, embedding, updating in place, and reading the
+typographic context. That is the difference between testing the plugin and
+testing a copy of it, and it is how the enum-comparison bug below was found.
 
-The webview side (`webview/`) is fully covered, being plain browser code.
+The route is osascript → ExtendScript → `app.doScript(..., UXPSCRIPT)`, because
+AppleScript refuses a `.idjs` directly. `tools/uxp.mjs` wraps it.
+
+Not covered: `src/ui/` (the panel controller), which still needs a human
+reloading the plugin. Everything under `webview/` is covered by the browser
+suite, being plain browser code.
 
 ### When the panel itself misbehaves
 
@@ -189,7 +196,7 @@ application. The InDesign ones are demonstrated by
 `node tools/probe-indesign.mjs`.
 
 - **`require` does not resolve directories** to `index.js`. Extensionless *file*
-  paths are fine. `npm run check` guards this.
+  paths are fine. `npm test` guards this.
 - **Webview local content** needs `src="plugin:/…"` (not a relative path) plus
   `requiredPermissions.webview.allowLocalRendering: "yes"`.
 - **`plugin:/` resolves to a `file://` origin**, where Chromium blocks `fetch`
@@ -222,6 +229,14 @@ application. The InDesign ones are demonstrated by
 - **Stroke weight is alignment-critical.** InDesign anchors the
   *stroke-inclusive* bottom edge to the baseline, so any weight shifts an
   equation by half of it — even with colour None, when nothing is visible.
+- **UXP enum values do not compare with `===`.** `swatch.space` and
+  `ColorSpace.CMYK` both stringify to "CMYK" and are still not equal, so a
+  direct comparison silently fails every branch — which is how "match text
+  colour" rendered everything black for a long time without an error. Use
+  `sameEnum` from `src/id/doc.js`.
+- **An embedded graphic is still a `Link`.** `link.unlink()` embeds it; the
+  Link remains and its `status` becomes `LINK_EMBEDDED`. Checking for the
+  absence of a link reports every insert as unembedded.
 - **Applying an object style resets anchored-object settings**, so anchoring is
   the very last thing `placeNew`/`replaceIn` do. A clean-up pass placed after
   `anchorInline` silently wiped the baseline offset.

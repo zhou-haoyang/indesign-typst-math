@@ -100,33 +100,21 @@ is ESM.
 ### Checks
 
 ```sh
-npm run check                      # module resolution, message envelopes, baseline offset
-npm run validate-template          # depth arithmetic vs pixel-measured ground truth
-node tools/smoke-webview.mjs       # wasm compiler vs the typst CLI, headless
-node tools/smoke-preview.mjs       # message bridge, preview painting, diagnostics
-node tools/smoke-wasm-loading.mjs  # each wasm-loading strategy in isolation
-npm run test:indesign              # geometry, against a live InDesign
+npm test              # unit + render — no app needed
+npm run test:all      # every suite
+npm run test:browser  # headless Chrome: wasm, preview, message bridge
+npm run test:app      # the real plugin code, in a live InDesign
 ```
 
-InDesign is also drivable ad hoc, which is the fastest way to settle a question
-about its DOM:
+`npm test` is the one to run after any refactor: it includes a check that every
+relative `require` resolves, because UXP's module resolver is not Node's — it
+will not resolve a directory to its `index.js`.
 
-```sh
-node tools/probe-indesign.mjs                  # properties, anchoring, stroke
-node tools/probe-indesign.mjs --scratch 'return J({ n: frame.lines.length });'
-```
-
-`test:indesign` drives the running InDesign over AppleScript (`tools/id.mjs`),
-places real Typst PDFs in a scratch document and checks the whole chain: the
-PDF page box becomes the frame size, the frame's bottom edge sits on the text
-baseline at offset 0, and the depth offset lands the maths baseline on the text
-baseline — on a first line and a later one, which behave differently. The
-scratch document is closed without saving.
-
-`npm run check` is the one to run after any refactor. UXP's module resolver is
-not Node's — it will not resolve a directory to its `index.js` — and nothing
-else catches that, because the headless tests never load the panel-side modules
-(those require `indesign`, which only exists inside InDesign).
+`npm run test:app` is the interesting one. A UXP script shares the plugin's
+module system, so the test drives the actual `src/id/*` code inside a live
+InDesign over AppleScript rather than reimplementing it: placement, anchoring,
+the baseline solve, labels, embedding and updating in place, all in a scratch
+document that is closed without saving.
 
 ### The depth measurement
 

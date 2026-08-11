@@ -7,7 +7,7 @@
  */
 const idsn = require("indesign");
 const { app } = idsn;
-const { tryGet, isUsable } = require("./doc");
+const { tryGet, isUsable, sameEnum } = require("./doc");
 const { anchorCharacter } = require("./anchor");
 
 const BLACK = { space: "CMYK", values: [0, 0, 0, 100] };
@@ -36,17 +36,17 @@ function swatchToColor(swatch) {
 
   const space = tryGet(() => swatch.space, null);
   let note = null;
-  if (tryGet(() => swatch.model, null) === idsn.ColorModel.SPOT) {
+  if (sameEnum(tryGet(() => swatch.model, null), idsn.ColorModel.SPOT)) {
     note = `Spot colour "${name}" rendered as its alternate values.`;
   }
 
-  if (space === idsn.ColorSpace.CMYK) {
+  if (sameEnum(space, idsn.ColorSpace.CMYK)) {
     return { color: { space: "CMYK", values: values.slice(0, 4).map(Number) }, note };
   }
-  if (space === idsn.ColorSpace.RGB) {
+  if (sameEnum(space, idsn.ColorSpace.RGB)) {
     return { color: { space: "RGB", values: values.slice(0, 3).map(Number) }, note };
   }
-  if (space === idsn.ColorSpace.LAB) {
+  if (sameEnum(space, idsn.ColorSpace.LAB)) {
     return { color: labToRgb(values), note: note || "Lab colour converted to RGB." };
   }
   return { color: BLACK, note: "Unsupported colour space; rendering in black." };
