@@ -11,7 +11,7 @@ const backend = require("../backends/typst-wasm");
 const { tryGet, activeDocument, asOneUndo } = require("../id/doc");
 const label = require("../id/label");
 const context = require("../id/context");
-const { insert, update } = require("../id/insert");
+const { insert, update, lastPlacementWarnings, lastFrameChrome } = require("../id/insert");
 const { rerenderAll } = require("../id/rerender");
 const fonts = require("./fonts");
 
@@ -137,6 +137,22 @@ const requestPreview = debounce(async () => {
 
 /* ------------------------------------------------------------ insert/update */
 
+/**
+ * Append anything the placement could not apply. Frame formatting can be
+ * refused without throwing, and silently leaving a stroke around every
+ * equation is the kind of thing that should announce itself.
+ */
+function withWarnings(message) {
+  const warnings = lastPlacementWarnings();
+  if (!warnings.length) return message;
+  // Only when something actually refused: the read-back names which object is
+  // still carrying formatting, which is otherwise indistinguishable from the
+  // outside — the frame, the graphic inside it and the applied style can each
+  // draw a box.
+  return [message, `Could not clear: ${warnings.join("; ")}`, lastFrameChrome()]
+    .filter(Boolean).join("\n");
+}
+
 function buildRecord(spec, metrics) {
   return label.makeRecord({
     body: spec.body,
@@ -184,7 +200,7 @@ async function commit() {
         asset: result.asset, metrics: result.metrics, record,
       });
       state.editing.record = record;
-      setStatus("Updated.");
+      setStatus(withWarnings("Updated."));
     } else {
       const target = context.currentTarget();
       const { frame, anchored } = await insert({
@@ -192,9 +208,9 @@ async function commit() {
       });
       state.editing = { frame, record, id: tryGet(() => frame.id, null) };
       lastSignature = selectionSignature();
-      setStatus(anchored
+      setStatus(withWarnings(anchored
         ? `Inserted inline (depth ${result.metrics.depth.toFixed(2)} pt).`
-        : "Inserted on the page.");
+        : "Inserted on the page."));
       syncEditingUI();
     }
   } catch (err) {

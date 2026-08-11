@@ -47,8 +47,15 @@ in the text never moves.
 The artwork is a PDF, placed and then embedded, so the `.indd` carries no
 external dependency. The expression and its settings live in the frame's script
 label, which is what survives saving, closing and copy/paste — and is what makes
-a pasted duplicate editable too. Every frame gets a **Typst Equation** object
-style, so you can change how all of them behave from one place.
+a pasted duplicate editable too.
+
+Equation frames carry no object style, deliberately. A frame from `place()`
+inherits the document's *current default* object attributes, and
+`objectStyles.add()` captures those same defaults — so a plugin-owned style is
+not a neutral container, it is a way to stamp whatever the defaults happened to
+be (a 1pt stroke, a corner radius) onto every equation. Frames are detached from
+any style and their fill, stroke and corner options are set explicitly, then
+read back, since these properties can refuse an assignment without throwing.
 
 ### What InDesign handles, and what it cannot
 

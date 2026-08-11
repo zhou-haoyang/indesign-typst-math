@@ -21,7 +21,7 @@ const { localFileSystem } = require("uxp").storage;
 
 const { withPoints, asOneUndo, tryGet } = require("./doc");
 const { writeRecord } = require("./label");
-const { ensureObjectStyle } = require("./objectstyle");
+const { neutralize, describeChrome } = require("./frame");
 
 /** Cached once per session: does a positive anchorYoffset move the object down? */
 let positiveIsDown = null;
@@ -79,16 +79,44 @@ function frameOf(placed) {
   throw new Error("Could not find the frame InDesign placed the graphic into.");
 }
 
+/** Anything the frame clean-up could not apply, for the panel to report. */
+let lastTidyFailures = [];
+/** Observed frame state after the most recent placement. */
+let lastChrome = "";
+
 function tidyFrame(doc, frame) {
-  try { frame.appliedObjectStyle = ensureObjectStyle(doc); } catch { /* not fatal */ }
-  const none = tryGet(() => doc.swatches.itemByName("None"), null);
-  if (none) {
-    try { frame.fillColor = none; } catch { /* ignore */ }
-    try { frame.strokeColor = none; } catch { /* ignore */ }
-  }
-  try { frame.strokeWeight = 0; } catch { /* ignore */ }
+  lastTidyFailures = [];
+  // No plugin-owned object style: one added with objectStyles.add() captures
+  // the document's default frame attributes and stamps them onto every
+  // equation, which is where the 1pt stroke and corner radius came from.
+  lastTidyFailures = lastTidyFailures.concat(neutralize(doc, frame));
   try { frame.textWrapPreferences.textWrapMode = idsn.TextWrapModes.NONE; } catch { /* ignore */ }
+  // Stroke is cleared first: a stroke would sit outside the geometric bounds
+  // the depth calculation is based on.
   frame.fit(idsn.FitOptions.FRAME_TO_CONTENT);
+}
+
+/**
+ * Final pass, once the frame will not be touched again.
+ *
+ * Embedding a link replaces the frame's content, and anchoring changes how the
+ * frame is treated, either of which can bring default object attributes back.
+ * Clearing once up front is therefore not enough — and the readout has to come
+ * from here, or it describes a state that no longer exists.
+ */
+function finishFrame(doc, frame) {
+  lastTidyFailures = lastTidyFailures.concat(neutralize(doc, frame));
+  lastChrome = describeChrome(doc, frame);
+}
+
+/** Problems from the most recent placement, if any. */
+function lastPlacementWarnings() {
+  return lastTidyFailures;
+}
+
+/** What the frame actually looks like after placement — read back, not assumed. */
+function lastFrameChrome() {
+  return lastChrome;
 }
 
 /**
@@ -202,6 +230,7 @@ function placeNew(doc, path, metrics, record, target) {
     tidyFrame(doc, frame);
     if (anchored) anchorInline(frame, record.mode, metrics.depth);
     embed(frame);
+    finishFrame(doc, frame);
     writeRecord(frame, record);
     return { frame, anchored };
   } finally {
@@ -221,6 +250,7 @@ function replaceIn(doc, frame, path, metrics, record) {
     tidyFrame(doc, frame);
     if (isAnchored(frame)) anchorInline(frame, record.mode, metrics.depth);
     embed(frame);
+    finishFrame(doc, frame);
     writeRecord(frame, record);
     return frame;
   } finally {
@@ -258,4 +288,6 @@ module.exports = {
   placeNew,
   replaceIn,
   isAnchored,
+  lastPlacementWarnings,
+  lastFrameChrome,
 };
