@@ -105,7 +105,15 @@ npm run validate-template          # depth arithmetic vs pixel-measured ground t
 node tools/smoke-webview.mjs       # wasm compiler vs the typst CLI, headless
 node tools/smoke-preview.mjs       # message bridge, preview painting, diagnostics
 node tools/smoke-wasm-loading.mjs  # each wasm-loading strategy in isolation
+npm run test:indesign              # geometry, against a live InDesign
 ```
+
+`test:indesign` drives the running InDesign over AppleScript (`tools/id.mjs`),
+places real Typst PDFs in a scratch document and checks the whole chain: the
+PDF page box becomes the frame size, the frame's bottom edge sits on the text
+baseline at offset 0, and the depth offset lands the maths baseline on the text
+baseline — on a first line and a later one, which behave differently. The
+scratch document is closed without saving.
 
 `npm run check` is the one to run after any refactor. UXP's module resolver is
 not Node's — it will not resolve a directory to its `index.js` — and nothing

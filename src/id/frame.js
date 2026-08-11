@@ -52,21 +52,37 @@ function noneObjectStyle(doc) {
   return tryGet(() => doc.objectStyles.item(0), null);
 }
 
-/** Strip fill, stroke and corner effects from one object. */
+/**
+ * Strip fill, stroke and corner effects from one object.
+ *
+ * The stroke is not merely cosmetic: InDesign anchors the *stroke-inclusive*
+ * bottom edge to the text baseline, so any weight shifts an equation by half of
+ * it — even when the stroke colour is None and nothing is visible.
+ *
+ * And it must be cleared in the right order, which is not the obvious one.
+ * Measured against a live InDesign (tools/probe-indesign.mjs):
+ *
+ *     as placed             weight 0, colour None
+ *     strokeWeight = 0      weight 1          <- assigning zero *creates* a stroke
+ *     then strokeColor=None weight 0, colour None
+ *
+ * Assigning a weight is taken as "this object has a stroke" and InDesign
+ * substitutes the default weight. Setting the colour afterwards normalises it
+ * back. So: touch the stroke only if it is actually dirty, and always finish
+ * with the colour.
+ */
 function stripOne(doc, target, kind, failures) {
   const none = noneSwatch(doc);
-  if (none) {
-    set(target, "fillColor", none, failures);
-    set(target, "strokeColor", none, failures);
-  }
-  // Zero weight alone hides a stroke whatever its colour, so this is the
-  // assignment that actually matters.
-  set(target, "strokeWeight", 0, failures);
+  if (none) set(target, "fillColor", none, failures);
 
-  if (tryGet(() => target.strokeWeight, 0) > 0) {
-    // Some builds accept a swatch name where a swatch object was rejected.
-    set(target, "strokeColor", "None", failures);
+  const weight = tryGet(() => target.strokeWeight, 0);
+  const colour = tryGet(() => target.strokeColor.name, "");
+  const dirty = weight > 0 || (colour !== "None" && colour !== "");
+  if (dirty) {
     set(target, "strokeWeight", 0, failures);
+    // Last, and deliberately so: this is what settles the weight back to zero.
+    if (none) set(target, "strokeColor", none, failures);
+    else set(target, "strokeColor", "None", failures);
   }
 
   // Corner effects are inherited from the document defaults just like the
@@ -80,14 +96,18 @@ function stripOne(doc, target, kind, failures) {
     set(target, `${corner}CornerRadius`, 0, failures);
   }
 
-  // Last resort: the bulk `properties` setter sometimes takes where individual
-  // assignments are refused.
+  // Last resort: the bulk setter applies weight and colour together, which also
+  // avoids the "assigning a weight implies a stroke" behaviour above.
   if (tryGet(() => target.strokeWeight, 0) > 0) {
     const bulk = { strokeWeight: 0 };
     if (none) bulk.strokeColor = none;
     set(target, "properties", bulk, failures);
     const still = tryGet(() => target.strokeWeight, "?");
-    if (still > 0) failures.push(`${kind} stroke weight is still ${still}`);
+    if (still > 0) {
+      // Worth naming loudly: a residual stroke misaligns the equation by half
+      // its weight, not just draws a box.
+      failures.push(`${kind} stroke weight is still ${still} (shifts baseline by ${still / 2}pt)`);
+    }
   }
 }
 

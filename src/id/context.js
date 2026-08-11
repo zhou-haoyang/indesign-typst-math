@@ -8,6 +8,7 @@
 const idsn = require("indesign");
 const { app } = idsn;
 const { tryGet, isUsable } = require("./doc");
+const { anchorCharacter } = require("./anchor");
 
 const BLACK = { space: "CMYK", values: [0, 0, 0, 100] };
 
@@ -122,10 +123,9 @@ function currentTarget() {
   return { kind: "page", why: `${name} is neither text nor a page item` };
 }
 
-/** The insertion point an anchored frame hangs from, if it is anchored at all. */
+/** The text an anchored frame hangs from, if it is anchored at all. */
 function anchorInsertionPoint(frame) {
-  const offset = tryGet(() => frame.storyOffset, null);
-  return isUsable(offset) ? offset : null;
+  return anchorCharacter(frame);
 }
 
 module.exports = { readAt, currentTarget, anchorInsertionPoint, BLACK };

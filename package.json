@@ -6,6 +6,7 @@
   "scripts": {
     "setup": "node scripts/vendor.mjs",
     "validate-template": "python3 tools/validate-template.py",
+    "test:indesign": "node tools/test-indesign.mjs",
     "check": "node tools/check-requires.mjs && node tools/test-messages.mjs && node tools/test-baseline-offset.mjs"
   },
   "devDependencies": {

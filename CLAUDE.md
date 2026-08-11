@@ -16,6 +16,7 @@ npm run validate-template      # depth arithmetic vs pixel-measured ground truth
 node tools/smoke-webview.mjs       # wasm compiler vs the typst CLI
 node tools/smoke-preview.mjs       # message bridge, preview painting, diagnostics
 node tools/smoke-wasm-loading.mjs  # each wasm-loading strategy in isolation
+npm run test:indesign              # geometry, against a live InDesign
 ```
 
 Each tool is standalone — run one directly rather than a suite runner. The
@@ -33,11 +34,22 @@ panel loads but `entrypoints.setup()` throws "Could not find panel".
 
 ## What the checks do and do not cover
 
-`src/` is **not** exercised by any automated check. Those modules
-`require("indesign")`, which only exists inside InDesign, so the headless tests
-cannot load them. `npm run check` verifies module resolution only. Anything
-touching `src/id/` or `src/ui/` is unverified until a human reloads the plugin
-and tries it — do not report such changes as verified.
+`src/` is not loadable by the headless tests: those modules `require("indesign")`,
+which exists only inside InDesign.
+
+**But InDesign itself is drivable from the shell** — `tools/id.mjs` runs
+ExtendScript in the running app over AppleScript and returns JSON, so DOM
+questions ("does this property exist", "which way does this move") are
+answerable in seconds instead of by screenshot round-trip. `probe-indesign.mjs`
+is the scratchpad for that; `test-indesign.mjs` is the standing geometry test.
+Use it. Several bugs in this plugin survived multiple wrong guesses that one
+probe would have settled.
+
+Caveat: that channel is ExtendScript, not UXP. Layout behaviour is identical,
+but which properties are *exposed* can differ, so treat property-existence
+findings as strong evidence rather than proof for the plugin's own code.
+
+`src/ui/` still needs a human reloading the plugin.
 
 The webview side (`webview/`) *is* covered, because it is plain browser code.
 
@@ -150,6 +162,18 @@ These cost several debugging rounds each and none reproduce outside UXP.
   every equation. Frames are detached with `[None]` and formatted explicitly.
 - **`link.unlink()` (embedding) restores default frame attributes**, so
   formatting must be reapplied *after* embedding, not just before.
+- **`PageItem.storyOffset` and `PageItem.parentStory` do not exist** despite
+  appearing in scripting references — they throw. An anchored frame's anchor is
+  its `parent`, which is a `Character`. All the anchor lookups live in
+  `src/id/anchor.js`. Because the reads were tolerant, the throw was swallowed
+  and three features silently did nothing for a long time.
+- **Assigning `strokeWeight = 0` *creates* a 1pt stroke.** InDesign reads a
+  weight assignment as "this object has a stroke" and substitutes the default;
+  setting `strokeColor` afterwards settles it back to 0. So touch the stroke
+  only when it is dirty, and always finish with the colour.
+- **Stroke weight is alignment-critical.** InDesign anchors the
+  *stroke-inclusive* bottom edge to the baseline, so any weight shifts an
+  equation by half of it — even with colour None, when nothing is visible.
 - **Applying an object style resets anchored-object settings**, so anchoring is
   the very last thing `placeNew`/`replaceIn` do. A clean-up pass placed after
   `anchorInline` silently wiped the baseline offset.

@@ -23,6 +23,7 @@ const { withPoints, asOneUndo, tryGet, isUsable } = require("./doc");
 const { writeRecord } = require("./label");
 const { neutralize, describeChrome } = require("./frame");
 const { chooseOffset } = require("./baseline");
+const { anchorBaseline, anchorStory, isAnchored } = require("./anchor");
 
 /* --------------------------------------------------------------- temp file */
 
@@ -135,31 +136,6 @@ function lastAlignmentResidual() {
 let baselineSource = "none";
 
 /**
- * The y coordinate of the text baseline the frame is anchored to.
- *
- * `Line.baseline` is the dependable one. An insertion point may or may not
- * expose `baseline` depending on the version, and if it does not, falling back
- * without saying so reintroduces the first-line bug invisibly.
- */
-function textBaselineOf(frame) {
-  const anchor = tryGet(() => frame.storyOffset, null);
-  if (!anchor) return null;
-
-  const direct = tryGet(() => anchor.baseline, null);
-  if (typeof direct === "number") {
-    baselineSource = "anchor";
-    return direct;
-  }
-  const line = tryGet(() => anchor.lines.item(0), null);
-  const viaLine = line ? tryGet(() => line.baseline, null) : null;
-  if (typeof viaLine === "number") {
-    baselineSource = "line";
-    return viaLine;
-  }
-  return null;
-}
-
-/**
  * The frame's bottom edge and the baseline of the line it is anchored in.
  *
  * Both must come from the same settled layout: on a first line the baseline
@@ -167,15 +143,16 @@ function textBaselineOf(frame) {
  * unsolvable.
  */
 function measureAgainstBaseline(frame) {
-  try { frame.parentStory.recompose(); } catch { /* not in a story, or no-op */ }
+  const story = anchorStory(frame);
+  if (story) { try { story.recompose(); } catch { /* already settled */ } }
   const bottom = tryGet(() => frame.geometricBounds[2], null);
-  let baseline = textBaselineOf(frame);
+  let baseline = anchorBaseline(frame);
+  baselineSource = baseline === null ? "unavailable" : "anchor";
   // A baseline in a different coordinate space would be worse than none.
   if (baseline !== null && bottom !== null && Math.abs(bottom - baseline) > 200) {
     baseline = null;
     baselineSource = "out of range";
   }
-  if (baseline === null && baselineSource !== "out of range") baselineSource = "frame bottom";
   return { bottom, baseline };
 }
 
@@ -241,10 +218,6 @@ function clearContent(frame) {
   for (let i = graphics.length - 1; i >= 0; i--) {
     try { graphics[i].remove(); } catch { /* ignore */ }
   }
-}
-
-function isAnchored(frame) {
-  return isUsable(tryGet(() => frame.storyOffset, null));
 }
 
 function placeFloating(doc, path, metrics) {
@@ -337,7 +310,6 @@ module.exports = {
   prepareAsset,
   discardAsset,
   replaceIn,
-  isAnchored,
   lastPlacementWarnings,
   lastFrameChrome,
   lastOffset,

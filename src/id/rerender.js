@@ -13,8 +13,9 @@ const { withPoints, asOneUndo, tryGet, isUsable } = require("./doc");
 const { findAll, makeRecord } = require("./label");
 const { readAt } = require("./context");
 const {
-  prepareAsset, discardAsset, replaceIn, isAnchored, lastAlignmentResidual,
+  prepareAsset, discardAsset, replaceIn, lastAlignmentResidual,
 } = require("./insert");
+const { anchorCharacter } = require("./anchor");
 
 /**
  * Work out what an existing equation should be rendered as right now.
@@ -30,8 +31,9 @@ function specForExisting(frame, record, preamble) {
   };
   const wantsSize = !record.size || record.size.mode === "auto";
   const wantsColor = !record.color || record.color.mode === "auto";
-  if ((wantsSize || wantsColor) && isAnchored(frame)) {
-    const at = readAt(frame.storyOffset);
+  const anchor = (wantsSize || wantsColor) ? anchorCharacter(frame) : null;
+  if (anchor) {
+    const at = readAt(anchor);
     if (wantsSize && at.size) spec.size = at.size;
     if (wantsColor) spec.color = at.color;
   }
