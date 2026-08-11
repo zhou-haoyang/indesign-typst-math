@@ -13,7 +13,9 @@ const backend = require("../backends/index").get("typst");
 const { tryGet, activeDocument, asOneUndo } = require("../id/doc");
 const label = require("../id/label");
 const context = require("../id/context");
-const { insert, update, lastPlacementWarnings, lastFrameChrome } = require("../id/insert");
+const {
+  insert, update, lastPlacementWarnings, lastFrameChrome, lastOffset,
+} = require("../id/insert");
 const { rerenderAll } = require("../id/rerender");
 const fonts = require("./fonts");
 
@@ -211,7 +213,8 @@ async function commit() {
       state.editing = { frame, record, id: tryGet(() => frame.id, null) };
       lastSignature = selectionSignature();
       setStatus(withWarnings(anchored
-        ? `Inserted inline (depth ${result.metrics.depth.toFixed(2)} pt).`
+        ? `Inserted inline (depth ${result.metrics.depth.toFixed(2)} pt, ` +
+          `Y offset ${lastOffset()} pt).`
         : "Inserted on the page."));
       syncEditingUI();
     }

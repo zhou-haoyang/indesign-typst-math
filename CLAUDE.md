@@ -11,7 +11,7 @@ is used by the checks).
 
 ```sh
 npm install && npm run setup   # setup populates vendor/ (~65 MB, gitignored)
-npm run check                  # module resolution + message-envelope parsing (fast)
+npm run check                  # module resolution, message envelopes, baseline offset (fast)
 npm run validate-template      # depth arithmetic vs pixel-measured ground truth
 node tools/smoke-webview.mjs       # wasm compiler vs the typst CLI
 node tools/smoke-preview.mjs       # message bridge, preview painting, diagnostics
@@ -94,6 +94,15 @@ Also: Typst's default `bottom-edge` is the baseline, so an auto-height page
 `npm run validate-template` checks this against pixel-measured ink. If you touch
 `webview/template.js`, run it.
 
+Applying that depth needs the sign of `anchorYoffset`, which is not clearly
+documented. It is *measured*, not assumed: at offset 0 InDesign puts the frame's
+bottom edge on the text baseline, so that reading is the baseline, in the same
+coordinate space as `geometricBounds`, and the target is `baseline + depth`.
+`src/id/baseline.js` holds that decision, free of InDesign imports so
+`tools/test-baseline-offset.mjs` can check it converges under either convention.
+The panel reports the applied offset and residual, e.g.
+`Y offset +2.46, off by 0.00 pt`.
+
 ### What InDesign will not do
 
 Once anchored, InDesign owns line breaking, justification, leading and
@@ -135,6 +144,9 @@ These cost several debugging rounds each and none reproduce outside UXP.
   every equation. Frames are detached with `[None]` and formatted explicitly.
 - **`link.unlink()` (embedding) restores default frame attributes**, so
   formatting must be reapplied *after* embedding, not just before.
+- **Applying an object style resets anchored-object settings**, so anchoring is
+  the very last thing `placeNew`/`replaceIn` do. A clean-up pass placed after
+  `anchorInline` silently wiped the baseline offset.
 
 ## Debugging approach
 

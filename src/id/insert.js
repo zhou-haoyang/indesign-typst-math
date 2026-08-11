@@ -22,6 +22,7 @@ const { localFileSystem } = require("uxp").storage;
 const { withPoints, asOneUndo, tryGet } = require("./doc");
 const { writeRecord } = require("./label");
 const { neutralize, describeChrome } = require("./frame");
+const { chooseOffset } = require("./baseline");
 
 /** Cached once per session: does a positive anchorYoffset move the object down? */
 let positiveIsDown = null;
@@ -83,6 +84,8 @@ function frameOf(placed) {
 let lastTidyFailures = [];
 /** Observed frame state after the most recent placement. */
 let lastChrome = "";
+/** The Y offset actually applied, for the status line. */
+let lastOffsetNote = "";
 
 function tidyFrame(doc, frame) {
   lastTidyFailures = [];
@@ -105,7 +108,7 @@ function tidyFrame(doc, frame) {
  * from here, or it describes a state that no longer exists.
  */
 function finishFrame(doc, frame) {
-  lastTidyFailures = lastTidyFailures.concat(neutralize(doc, frame));
+  lastTidyFailures = lastTidyFailures.concat(neutralize(doc, frame, false));
   lastChrome = describeChrome(frame);
 }
 
@@ -119,40 +122,39 @@ function lastFrameChrome() {
   return lastChrome;
 }
 
+/** The baseline Y offset applied to the most recent inline placement. */
+function lastOffset() {
+  return lastOffsetNote;
+}
+
+function bottomEdge(frame) {
+  // Anchored geometry only settles once the story has been laid out again.
+  try { frame.parentStory.recompose(); } catch { /* not in a story, or no-op */ }
+  return tryGet(() => frame.geometricBounds[2], null);
+}
+
 /**
  * Shift the object down by `depth` so the maths baseline lands on the text
- * baseline.
- *
- * The sign convention of `anchorYoffset` is not worth guessing at, so the first
- * insert of a session probes it: nudge by a known amount, see which way the
- * frame actually moved, remember the answer.
+ * baseline. The decision lives in ./baseline so it can be tested.
  */
 function applyBaselineOffset(frame, depthPt) {
-  const settings = frame.anchoredObjectSettings;
-  if (!depthPt) {
-    try { settings.anchorYoffset = 0; } catch { /* ignore */ }
-    return;
-  }
-
-  if (positiveIsDown === null) {
-    const PROBE = 12;
-    const before = tryGet(() => frame.geometricBounds[2], null);
-    try {
-      settings.anchorYoffset = PROBE;
-      const after = tryGet(() => frame.geometricBounds[2], null);
-      settings.anchorYoffset = 0;
-      if (before !== null && after !== null && Math.abs(Math.abs(after - before) - PROBE) < 0.5) {
-        positiveIsDown = after > before;
+  const settings = tryGet(() => frame.anchoredObjectSettings, null);
+  if (!settings) return;
+  const result = chooseOffset({
+    depthPt,
+    positiveIsDown,
+    setOffset: (value) => {
+      try {
+        settings.anchorYoffset = value;
+        return true;
+      } catch {
+        return false;
       }
-    } catch { /* fall through to the documented convention */ }
-  }
-
-  // The UI convention is that a positive Y offset raises the object, so a
-  // downward shift is negative. Only relied on if the probe was inconclusive.
-  const down = positiveIsDown === null ? false : positiveIsDown;
-  try {
-    settings.anchorYoffset = down ? depthPt : -depthPt;
-  } catch { /* some frames refuse; the equation merely sits a little high */ }
+    },
+    getBottom: () => bottomEdge(frame),
+  });
+  positiveIsDown = result.positiveIsDown;
+  lastOffsetNote = result.note;
 }
 
 function anchorInline(frame, mode, depthPt) {
@@ -228,9 +230,11 @@ function placeNew(doc, path, metrics, record, target) {
       frame = placeFloating(doc, path, metrics);
     }
     tidyFrame(doc, frame);
-    if (anchored) anchorInline(frame, record.mode, metrics.depth);
     embed(frame);
     finishFrame(doc, frame);
+    // Anchoring goes last: applying an object style or re-fitting resets
+    // anchored-object settings, so a computed Y offset must be the final word.
+    if (anchored) anchorInline(frame, record.mode, metrics.depth);
     writeRecord(frame, record);
     return { frame, anchored };
   } finally {
@@ -248,9 +252,9 @@ function replaceIn(doc, frame, path, metrics, record) {
     clearContent(frame);
     frame.place(path);
     tidyFrame(doc, frame);
-    if (isAnchored(frame)) anchorInline(frame, record.mode, metrics.depth);
     embed(frame);
     finishFrame(doc, frame);
+    if (isAnchored(frame)) anchorInline(frame, record.mode, metrics.depth);
     writeRecord(frame, record);
     return frame;
   } finally {
@@ -289,4 +293,5 @@ module.exports = {
   isAnchored,
   lastPlacementWarnings,
   lastFrameChrome,
+  lastOffset,
 };

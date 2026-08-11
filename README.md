@@ -100,7 +100,7 @@ is ESM.
 ### Checks
 
 ```sh
-npm run check                      # module resolution + message-envelope parsing
+npm run check                      # module resolution, message envelopes, baseline offset
 npm run validate-template          # depth arithmetic vs pixel-measured ground truth
 node tools/smoke-webview.mjs       # wasm compiler vs the typst CLI, headless
 node tools/smoke-preview.mjs       # message bridge, preview painting, diagnostics

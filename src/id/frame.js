@@ -97,14 +97,19 @@ function stripOne(doc, target, kind, failures) {
  *
  * @returns {string[]} descriptions of whatever could not be applied
  */
-function neutralize(doc, frame) {
+/**
+ * @param {boolean} detachStyle Applying an object style resets everything the
+ *   style governs — including anchored-object settings, which is how a second
+ *   pass silently wipes a computed baseline offset. Only the first pass detaches.
+ */
+function neutralize(doc, frame, detachStyle = true) {
   const failures = [];
   if (!noneSwatch(doc)) failures.push("no None swatch in this document");
 
-  // Detach first: a style reasserts its own attributes over anything set before
-  // it is applied.
-  const plain = noneObjectStyle(doc);
-  if (plain) set(frame, "appliedObjectStyle", plain, failures);
+  if (detachStyle) {
+    const plain = noneObjectStyle(doc);
+    if (plain) set(frame, "appliedObjectStyle", plain, failures);
+  }
 
   stripOne(doc, frame, "frame", failures);
 

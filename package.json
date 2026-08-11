@@ -6,7 +6,7 @@
   "scripts": {
     "setup": "node scripts/vendor.mjs",
     "validate-template": "python3 tools/validate-template.py",
-    "check": "node tools/check-requires.mjs && node tools/test-messages.mjs"
+    "check": "node tools/check-requires.mjs && node tools/test-messages.mjs && node tools/test-baseline-offset.mjs"
   },
   "devDependencies": {
     "@myriaddreamin/typst-ts-renderer": "0.7.0",
