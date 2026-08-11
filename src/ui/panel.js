@@ -50,9 +50,26 @@ function debounce(fn, ms) {
   };
 }
 
-function setStatus(text, kind) {
+/** How long a placement result resists being overwritten by routine updates. */
+const STICKY_MS = 15000;
+let stickyUntil = 0;
+
+/**
+ * @param {{sticky?: boolean}} options  Placement results are sticky: inserting
+ *   selects the new frame, which triggers a preview, whose success path would
+ *   otherwise wipe the message a quarter of a second after it appears.
+ */
+function setStatus(text, kind, options = {}) {
+  const now = Date.now();
+  const important = options.sticky || kind === "error";
+  // "Inserting…" and friends replace a sticky message but do not become one.
+  if (!important && kind !== "busy" && now < stickyUntil) return;
+  stickyUntil = important ? now + STICKY_MS : 0;
   el.status.textContent = text || "";
   el.status.className = `status${kind ? " " + kind : ""}`;
+  // Mirrored to the console so it can be read and copied even after the panel
+  // moves on, and so it survives a status the panel is too narrow to show.
+  if (text && important) console.log(`[typst] ${text}`);
 }
 
 function describeDiagnostics(diagnostics) {
@@ -204,7 +221,7 @@ async function commit() {
         asset: result.asset, metrics: result.metrics, record,
       });
       state.editing.record = record;
-      setStatus(withWarnings("Updated."));
+      setStatus(withWarnings("Updated."), "", { sticky: true });
     } else {
       const target = context.currentTarget();
       const { frame, anchored } = await insert({
@@ -213,9 +230,9 @@ async function commit() {
       state.editing = { frame, record, id: tryGet(() => frame.id, null) };
       lastSignature = selectionSignature();
       setStatus(withWarnings(anchored
-        ? `Inserted inline (depth ${result.metrics.depth.toFixed(2)} pt, ` +
-          `Y offset ${lastOffset()} pt).`
-        : "Inserted on the page."));
+        ? `Inserted inline\ndepth ${result.metrics.depth.toFixed(2)} pt` +
+          `\nY offset ${lastOffset()}`
+        : "Inserted on the page."), "", { sticky: true });
       syncEditingUI();
     }
   } catch (err) {
@@ -470,7 +487,7 @@ function wireEvents() {
       setStatus(summary.total
         ? `Re-rendered ${summary.updated} of ${summary.total}${failed}${alignment}${blind}`
         : "No Typst equations in this document.",
-        summary.failures.length ? "error" : "");
+        summary.failures.length ? "error" : "", { sticky: true });
     } catch (err) {
       setStatus(String((err && err.message) || err), "error");
     } finally {
