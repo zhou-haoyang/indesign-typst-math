@@ -1,6 +1,6 @@
 {
   "id": "indesign-typst",
-  "name": "Indesign Typst",
+  "name": "Typst Math",
   "version": "0.1.0",
   "main": "index.html",
   "host": {
@@ -8,33 +8,37 @@
     "minVersion": "21.4.1"
   },
   "manifestVersion": 5,
+  "requiredPermissions": {
+    "localFileSystem": "fullAccess",
+    "webview": {
+      "allow": "yes",
+      "allowLocalRendering": "yes",
+      "domains": [],
+      "enableMessageBridge": "localOnly"
+    }
+  },
   "entrypoints": [
     {
-      "type": "command",
-      "id": "showAlert",
-      "label": "Show alert"
-    },
-    {
       "type": "panel",
-      "id": "showPanel",
+      "id": "typstMath",
       "minimumSize": {
-        "width": 230,
-        "height": 200
+        "width": 280,
+        "height": 320
       },
       "maximumSize": {
         "width": 2000,
         "height": 2000
       },
       "preferredDockedSize": {
-        "width": 300,
-        "height": 300
+        "width": 340,
+        "height": 520
       },
       "preferredFloatingSize": {
-        "width": 300,
-        "height": 300
+        "width": 420,
+        "height": 560
       },
       "label": {
-        "default": "Show panel"
+        "default": "Typst Math"
       },
       "icons": [
         {

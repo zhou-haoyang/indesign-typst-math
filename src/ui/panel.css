@@ -1,0 +1,168 @@
+/* UXP supports a useful subset of CSS; this sticks to flexbox, custom
+   properties and simple selectors, which are all reliable in InDesign 21. */
+
+:root {
+  --gap: 6px;
+  --pad: 8px;
+  --border: rgba(128, 128, 128, .3);
+  --muted: #8a8a8a;
+  --error: #d7373f;
+  --accent: #2680eb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  font-size: 11px;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: var(--pad);
+}
+
+.toolbar,
+.statusbar,
+.settings-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--gap);
+  flex: 0 0 auto;
+}
+
+.toolbar {
+  padding-bottom: var(--pad);
+}
+
+.statusbar {
+  padding-top: var(--pad);
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.field > span {
+  color: var(--muted);
+}
+
+select {
+  min-width: 74px;
+}
+
+#size-pt {
+  width: 58px;
+}
+
+#editor {
+  flex: 0 0 auto;
+  height: 84px;
+  min-height: 48px;
+  resize: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 6px;
+}
+
+#preview {
+  flex: 1 1 auto;
+  min-height: 90px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-top: var(--pad);
+}
+
+.status {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  overflow: hidden;
+  max-height: 42px;
+}
+
+.status.error {
+  color: var(--error);
+}
+
+.status.busy {
+  font-style: italic;
+}
+
+button.cta {
+  font-weight: bold;
+}
+
+button.icon {
+  min-width: 26px;
+  padding: 2px 6px;
+}
+
+.hidden {
+  display: none;
+}
+
+/* Settings drawer */
+
+.settings {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--border);
+  margin-top: var(--pad);
+  padding-top: var(--pad);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 46%;
+  overflow: auto;
+}
+
+.settings-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--gap);
+}
+
+.settings .hint {
+  color: var(--muted);
+}
+
+#preamble {
+  height: 72px;
+  resize: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  padding: 6px;
+}
+
+.font-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 76px;
+  overflow: auto;
+  color: var(--muted);
+}
+
+.font-list li {
+  padding: 1px 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.font-list li.empty {
+  font-family: inherit;
+  font-style: italic;
+}

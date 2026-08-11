@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Typst preview</title>
+  <style>
+    :root {
+      --bg: #fff;
+      --fg: #2c2c2c;
+      --muted: #8a8a8a;
+      --guide: #2680eb;
+      --error: #d7373f;
+    }
+    body.dark {
+      --bg: #323232;
+      --fg: #e8e8e8;
+      --muted: #909090;
+      --guide: #5aa9f8;
+      --error: #ec5b62;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font: 11px/1.4 -apple-system, "Segoe UI", sans-serif;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #stage {
+      flex: 1 1 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 14px 12px;
+      overflow: auto;
+      position: relative;
+    }
+    /* The artwork sits in a box whose height is the Typst page box, so the
+       baseline guide can be positioned by simple percentage of that box. */
+    #art { position: relative; line-height: 0; }
+    #art svg { display: block; max-width: 100%; height: auto; }
+    #baseline {
+      position: absolute;
+      left: -10px; right: -10px;
+      border-top: 1px dashed var(--guide);
+      opacity: .8;
+      pointer-events: none;
+    }
+    #baseline::after {
+      content: "baseline";
+      position: absolute;
+      right: 0; top: 2px;
+      font-size: 8px;
+      color: var(--guide);
+      letter-spacing: .04em;
+    }
+    #status {
+      flex: 0 0 auto;
+      padding: 5px 10px;
+      border-top: 1px solid rgba(128, 128, 128, .25);
+      color: var(--muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 10px;
+      white-space: pre-wrap;
+      max-height: 40%;
+      overflow: auto;
+    }
+    #status.error { color: var(--error); }
+    .placeholder { color: var(--muted); font-style: italic; }
+  </style>
+</head>
+<body>
+  <div id="stage"><span class="placeholder" id="placeholder">Starting Typst compiler…</span></div>
+  <div id="status"></div>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

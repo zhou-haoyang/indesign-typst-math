@@ -1,17 +1,15 @@
 {
-  "name": "com.adobe.uxp.quick.starter.id",
-  "version": "1.0.0",
-  "description": "Default template for creating Adobe UXP based InDesign plugin.",
-  "main": "index.js",
-  "repository": {
-    "type": "git",
-    "url": "git@git.corp.adobe.com:torq/uxp-developer-tools.git",
-    "directory": "packages/uxp-templates-pack"
+  "name": "indesign-typst",
+  "version": "0.1.0",
+  "description": "Write Typst math expressions and place them into Adobe InDesign as editable anchored objects.",
+  "private": true,
+  "scripts": {
+    "setup": "node scripts/vendor.mjs",
+    "validate-template": "python3 tools/validate-template.py"
   },
-  "author": "Adobe Inc",
-  "license": "Apache-2.0",
-  "files": [
-    "template.json",
-    "template"
-  ]
+  "devDependencies": {
+    "@myriaddreamin/typst-ts-renderer": "0.7.0",
+    "@myriaddreamin/typst-ts-web-compiler": "0.7.0",
+    "@myriaddreamin/typst.ts": "0.7.0"
+  }
 }
