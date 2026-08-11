@@ -7,7 +7,7 @@
  */
 const idsn = require("indesign");
 const { app } = idsn;
-const { tryGet } = require("./doc");
+const { tryGet, isUsable } = require("./doc");
 
 const BLACK = { space: "CMYK", values: [0, 0, 0, 100] };
 
@@ -20,7 +20,7 @@ const BLACK = { space: "CMYK", values: [0, 0, 0, 100] };
  * the panel can say so.
  */
 function swatchToColor(swatch) {
-  if (!swatch || !tryGet(() => swatch.isValid, false)) return { color: BLACK, note: null };
+  if (!isUsable(swatch)) return { color: BLACK, note: null };
 
   const name = tryGet(() => swatch.name, "");
   if (name === "None" || name === "Paper" || name === "Registration") {
@@ -111,12 +111,13 @@ function currentTarget() {
     return { kind: "frame", frame: sel, why: `${name} selected as an object` };
   }
 
-  const ips = tryGet(() => sel.insertionPoints, null);
-  if (ips && tryGet(() => ips.length, 0) > 0) {
-    return { kind: "text", insertionPoint: ips.item(0), why: `text cursor in ${name}` };
-  }
-  if (tryGet(() => sel.parentStory, null)) {
-    return { kind: "text", insertionPoint: sel, why: `text cursor (${name})` };
+  // When the selection already *is* an insertion point, use it directly rather
+  // than indexing into its own insertionPoints collection.
+  if (isUsable(sel) && tryGet(() => sel.parentStory, null)) {
+    const ips = tryGet(() => sel.insertionPoints, null);
+    const nested = ips && tryGet(() => ips.length, 0) > 0 ? ips.item(0) : null;
+    const point = isUsable(nested) ? nested : sel;
+    return { kind: "text", insertionPoint: point, why: `text cursor in ${name}` };
   }
   return { kind: "page", why: `${name} is neither text nor a page item` };
 }
@@ -124,8 +125,7 @@ function currentTarget() {
 /** The insertion point an anchored frame hangs from, if it is anchored at all. */
 function anchorInsertionPoint(frame) {
   const offset = tryGet(() => frame.storyOffset, null);
-  if (!offset || !tryGet(() => offset.isValid, false)) return null;
-  return offset;
+  return isUsable(offset) ? offset : null;
 }
 
 module.exports = { readAt, currentTarget, anchorInsertionPoint, BLACK };

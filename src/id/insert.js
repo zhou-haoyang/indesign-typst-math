@@ -19,7 +19,7 @@ const { app } = idsn;
 const fs = require("fs");
 const { localFileSystem } = require("uxp").storage;
 
-const { withPoints, asOneUndo, tryGet } = require("./doc");
+const { withPoints, asOneUndo, tryGet, isUsable } = require("./doc");
 const { writeRecord } = require("./label");
 const { neutralize, describeChrome } = require("./frame");
 const { chooseOffset } = require("./baseline");
@@ -230,7 +230,7 @@ function embed(frame) {
   const graphics = tryGet(() => frame.allGraphics, null) || [];
   for (let i = 0; i < graphics.length; i++) {
     const link = tryGet(() => graphics[i].itemLink, null);
-    if (link && tryGet(() => link.isValid, false)) {
+    if (isUsable(link)) {
       try { link.unlink(); } catch { /* stays linked; still renders */ }
     }
   }
@@ -244,8 +244,7 @@ function clearContent(frame) {
 }
 
 function isAnchored(frame) {
-  const offset = tryGet(() => frame.storyOffset, null);
-  return !!(offset && tryGet(() => offset.isValid, false));
+  return isUsable(tryGet(() => frame.storyOffset, null));
 }
 
 function placeFloating(doc, path, metrics) {
@@ -271,7 +270,7 @@ function placeNew(doc, path, metrics, record, target) {
   try {
     let frame;
     let anchored = false;
-    if (target.kind === "text" && tryGet(() => target.insertionPoint.isValid, false)) {
+    if (target.kind === "text" && isUsable(target.insertionPoint)) {
       frame = frameOf(target.insertionPoint.place(path));
       anchored = true;
     } else {

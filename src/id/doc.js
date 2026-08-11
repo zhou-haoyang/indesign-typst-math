@@ -50,6 +50,24 @@ function asOneUndo(name, fn) {
   }
 }
 
+/**
+ * Whether a DOM object is usable.
+ *
+ * Deliberately optimistic: not every UXP DOM class exposes `isValid`, and
+ * treating a missing property as "invalid" silently disables whole code paths.
+ * Only an explicit `false` counts as invalid.
+ */
+function isUsable(object) {
+  if (!object) return false;
+  let valid;
+  try {
+    valid = object.isValid;
+  } catch {
+    return true; // the object exists; it just will not answer that question
+  }
+  return valid === undefined || valid === null ? true : !!valid;
+}
+
 /** Property read that tolerates the DOM throwing instead of returning null. */
 function tryGet(fn, fallback) {
   try {
@@ -62,10 +80,10 @@ function tryGet(fn, fallback) {
 
 function activeDocument() {
   const doc = tryGet(() => app.activeDocument, null);
-  if (!doc || !tryGet(() => doc.isValid, false)) {
+  if (!isUsable(doc)) {
     throw new Error("Open a document first.");
   }
   return doc;
 }
 
-module.exports = { withPoints, asOneUndo, tryGet, activeDocument };
+module.exports = { withPoints, asOneUndo, tryGet, isUsable, activeDocument };

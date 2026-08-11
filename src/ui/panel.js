@@ -10,7 +10,7 @@ const { app } = require("indesign");
 // Explicit file path: UXP's require does not resolve a directory to its
 // index.js, only Node does.
 const backend = require("../backends/index").get("typst");
-const { tryGet, activeDocument, asOneUndo } = require("../id/doc");
+const { tryGet, isUsable, activeDocument, asOneUndo } = require("../id/doc");
 const label = require("../id/label");
 const context = require("../id/context");
 const {
@@ -215,7 +215,7 @@ async function commit() {
     state.lastMetrics = result.metrics;
     const record = buildRecord(spec, result.metrics);
 
-    if (state.editing && tryGet(() => state.editing.frame.isValid, false)) {
+    if (state.editing && isUsable(state.editing.frame)) {
       await update({
         doc, frame: state.editing.frame,
         asset: result.asset, metrics: result.metrics, record,
@@ -333,7 +333,7 @@ function syncEditingUI() {
 
 function loadDocumentPreamble() {
   const doc = tryGet(() => app.activeDocument, null);
-  if (!doc || !tryGet(() => doc.isValid, false)) {
+  if (!isUsable(doc)) {
     state.preambleDoc = null;
     return;
   }
@@ -346,7 +346,7 @@ function loadDocumentPreamble() {
 
 const savePreamble = debounce(() => {
   const doc = tryGet(() => app.activeDocument, null);
-  if (!doc || !tryGet(() => doc.isValid, false)) return;
+  if (!isUsable(doc)) return;
   try {
     asOneUndo("Set Typst preamble", () => label.writeDocumentPreamble(doc, state.preamble));
   } catch (err) {
