@@ -131,6 +131,34 @@ function lastAlignmentResidual() {
   return lastResidual;
 }
 
+/** Where the baseline reading came from, so a silent fallback is visible. */
+let baselineSource = "none";
+
+/**
+ * The y coordinate of the text baseline the frame is anchored to.
+ *
+ * `Line.baseline` is the dependable one. An insertion point may or may not
+ * expose `baseline` depending on the version, and if it does not, falling back
+ * without saying so reintroduces the first-line bug invisibly.
+ */
+function textBaselineOf(frame) {
+  const anchor = tryGet(() => frame.storyOffset, null);
+  if (!anchor) return null;
+
+  const direct = tryGet(() => anchor.baseline, null);
+  if (typeof direct === "number") {
+    baselineSource = "anchor";
+    return direct;
+  }
+  const line = tryGet(() => anchor.lines.item(0), null);
+  const viaLine = line ? tryGet(() => line.baseline, null) : null;
+  if (typeof viaLine === "number") {
+    baselineSource = "line";
+    return viaLine;
+  }
+  return null;
+}
+
 /**
  * The frame's bottom edge and the baseline of the line it is anchored in.
  *
@@ -141,13 +169,13 @@ function lastAlignmentResidual() {
 function measureAgainstBaseline(frame) {
   try { frame.parentStory.recompose(); } catch { /* not in a story, or no-op */ }
   const bottom = tryGet(() => frame.geometricBounds[2], null);
-  const anchor = tryGet(() => frame.storyOffset, null);
-  let baseline = anchor ? tryGet(() => anchor.baseline, null) : null;
-  if (typeof baseline !== "number") baseline = null;
+  let baseline = textBaselineOf(frame);
   // A baseline in a different coordinate space would be worse than none.
   if (baseline !== null && bottom !== null && Math.abs(bottom - baseline) > 200) {
     baseline = null;
+    baselineSource = "out of range";
   }
+  if (baseline === null && baselineSource !== "out of range") baselineSource = "frame bottom";
   return { bottom, baseline };
 }
 
@@ -170,7 +198,10 @@ function applyBaselineOffset(frame, depthPt) {
     },
     measure: () => measureAgainstBaseline(frame),
   });
-  lastOffsetNote = result.note;
+  // Which reference the measurement used matters: falling back to the frame's
+  // own bottom edge is correct on an ordinary line but wrong on a first line,
+  // and that difference is invisible unless it is reported.
+  lastOffsetNote = `${result.note} (baseline: ${baselineSource})`;
   lastResidual = result.residual;
 }
 
