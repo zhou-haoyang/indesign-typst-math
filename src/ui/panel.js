@@ -7,7 +7,9 @@
  */
 const { app } = require("indesign");
 
-const backend = require("../backends").get("typst");
+// Explicit file path: UXP's require does not resolve a directory to its
+// index.js, only Node does.
+const backend = require("../backends/index").get("typst");
 const { tryGet, activeDocument, asOneUndo } = require("../id/doc");
 const label = require("../id/label");
 const context = require("../id/context");

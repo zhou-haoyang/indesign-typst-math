@@ -100,15 +100,22 @@ is ESM.
 ### Checks
 
 ```sh
+npm run check                      # module resolution + message-envelope parsing
 npm run validate-template          # depth arithmetic vs pixel-measured ground truth
 node tools/smoke-webview.mjs       # wasm compiler vs the typst CLI, headless
 node tools/smoke-preview.mjs       # message bridge, preview painting, diagnostics
 node tools/smoke-wasm-loading.mjs  # each wasm-loading strategy in isolation
-node tools/test-messages.mjs       # message-envelope parsing
 ```
 
-The first is the one that matters most. Inline anchoring rests entirely on
-`depth` — the distance from the maths baseline to the bottom of the page box —
+`npm run check` is the one to run after any refactor. UXP's module resolver is
+not Node's — it will not resolve a directory to its `index.js` — and nothing
+else catches that, because the headless tests never load the panel-side modules
+(those require `indesign`, which only exists inside InDesign).
+
+### The depth measurement
+
+`validate-template` is the check that matters most. Inline anchoring rests
+entirely on `depth` — the distance from the maths baseline to the bottom of the page box —
 and Typst has no API that reports it. Two plausible routes are quietly wrong:
 `here().position()` on an inline marker gives the line-box bottom, and
 `measure()` with `bottom-edge: "baseline"` clamps at the font's descender, which
