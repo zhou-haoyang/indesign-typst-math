@@ -1,5 +1,5 @@
 /**
- * Rendering backend registry.
+ * Rendering backends.
  *
  * A backend turns an expression into something placeable plus the numbers the
  * InDesign layer needs to position it. Typst is the only one today; MathJax and
@@ -7,7 +7,7 @@
  * about a generic `asset` rather than "the PDF": MathJax produces SVG and no
  * PDF at all.
  *
- * A backend is an object:
+ * A backend module exports:
  *
  *   {
  *     id:    "typst",
@@ -35,21 +35,15 @@
  * baseline sits inside the artwork.
  */
 
-const backends = new Map();
-
-function register(backend) {
-  backends.set(backend.id, backend);
-  return backend;
-}
+/** Adding a backend means adding a line here and writing the module. */
+const BACKENDS = {
+  typst: "./typst-wasm",
+};
 
 function get(id) {
-  const backend = backends.get(id);
-  if (!backend) throw new Error(`unknown rendering backend: ${id}`);
-  return backend;
+  const path = BACKENDS[id];
+  if (!path) throw new Error(`unknown rendering backend: ${id}`);
+  return require(path);
 }
 
-function list() {
-  return [...backends.values()];
-}
-
-module.exports = { register, get, list };
+module.exports = { get };

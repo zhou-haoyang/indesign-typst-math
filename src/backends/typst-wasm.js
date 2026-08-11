@@ -5,7 +5,6 @@
  * The webview is not just an implementation detail of the compiler — it is also
  * the preview surface, so a render both returns metrics here and paints there.
  */
-const { register } = require("./index");
 const { extractMessage, describeEvent } = require("./message");
 
 const READY_TIMEOUT_MS = 60000;
@@ -15,7 +14,6 @@ const PING_MS = 400;
 let webview = null;
 let nextId = 1;
 const pending = new Map();
-const loadEvents = [];
 let loadError = null;
 let messagesIn = 0;
 let unreadable = 0;
@@ -118,16 +116,12 @@ const backend = {
     webview = element;
     webview.addEventListener("message", onMessage);
 
-    // We are otherwise blind to the webview: it has its own console, and a
-    // failure to load looks identical to a slow compiler. Record whatever load
-    // events this UXP version emits so the timeout can say something useful.
-    for (const name of ["loadstart", "loadstop", "loaderror", "load", "error"]) {
+    // We are otherwise blind to the webview: it has its own console, so a
+    // failure to load looks identical to a slow compiler.
+    for (const name of ["loaderror", "error"]) {
       try {
         webview.addEventListener(name, (event) => {
-          loadEvents.push(name);
-          if (name === "loaderror" || name === "error") {
-            loadError = String((event && (event.message || event.type)) || name);
-          }
+          loadError = String((event && (event.message || event.type)) || name);
         });
       } catch { /* this UXP version does not emit that event */ }
     }
@@ -179,4 +173,4 @@ const backend = {
   },
 };
 
-module.exports = register(backend);
+module.exports = backend;

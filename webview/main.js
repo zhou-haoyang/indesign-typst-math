@@ -239,5 +239,3 @@ window.addEventListener("resize", () => {
   setTimeout(() => clearInterval(retry), 30000);
 })();
 
-// Exposed for the headless smoke test (tools/smoke-webview.mjs).
-window.__idt = { render, init, setFonts };

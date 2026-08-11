@@ -31,7 +31,7 @@
  */
 
 /** Deeper than any plausible expression, so the strut always wins. */
-export const STRUT_PT = 1000;
+const STRUT_PT = 1000;
 
 /** `top-edge`/`bottom-edge` must be "bounds": Typst's default bottom edge is the
  *  baseline, which makes an auto-height page clip every descender. */
@@ -41,7 +41,7 @@ const EDGES = 'top-edge: "bounds", bottom-edge: "bounds"';
  * Strip one layer of `$...$` so pasting `$x^2$` from a Typst document works as
  * well as typing `x^2`. Left alone if the inside contains its own delimiters.
  */
-export function normalizeBody(raw) {
+function normalizeBody(raw) {
   const t = String(raw == null ? "" : raw).trim();
   if (t.length >= 2 && t.startsWith("$") && t.endsWith("$")) {
     const inner = t.slice(1, -1);
@@ -51,7 +51,7 @@ export function normalizeBody(raw) {
 }
 
 /** Typst colour literal from a colour descriptor read off the InDesign swatch. */
-export function colorLiteral(color) {
+function colorLiteral(color) {
   if (!color) return 'rgb("#000000")';
   if (color.space === "CMYK") {
     const [c, m, y, k] = color.values;

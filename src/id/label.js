@@ -84,12 +84,9 @@ function findAll(doc) {
 }
 
 module.exports = {
-  LABEL_KEY,
-  DOC_PREAMBLE_KEY,
   readRecord,
   writeRecord,
   makeRecord,
-  hash,
   readDocumentPreamble,
   writeDocumentPreamble,
   findAll,

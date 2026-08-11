@@ -121,7 +121,7 @@ function neutralize(doc, frame) {
  * Reported from a read-back rather than from what was set, because several
  * objects contribute and only one is usually the culprit.
  */
-function describeChrome(doc, frame) {
+function describeChrome(frame) {
   const name = (value) => tryGet(() => value.name, "?");
   const parts = [
     `frame stroke ${tryGet(() => frame.strokeWeight, "?")}pt ` +
@@ -137,4 +137,4 @@ function describeChrome(doc, frame) {
   return parts.join(", ");
 }
 
-module.exports = { neutralize, describeChrome, noneSwatch };
+module.exports = { neutralize, describeChrome };

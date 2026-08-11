@@ -11,7 +11,7 @@ import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-export const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
 const MIME = {
   ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript",

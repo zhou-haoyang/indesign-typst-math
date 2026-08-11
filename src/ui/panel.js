@@ -7,7 +7,7 @@
  */
 const { app } = require("indesign");
 
-const backend = require("../backends/typst-wasm");
+const backend = require("../backends").get("typst");
 const { tryGet, activeDocument, asOneUndo } = require("../id/doc");
 const label = require("../id/label");
 const context = require("../id/context");

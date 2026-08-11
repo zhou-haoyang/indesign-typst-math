@@ -118,4 +118,4 @@ function anchorInsertionPoint(frame) {
   return offset;
 }
 
-module.exports = { readAt, currentTarget, anchorInsertionPoint, swatchToColor, BLACK };
+module.exports = { readAt, currentTarget, anchorInsertionPoint, BLACK };

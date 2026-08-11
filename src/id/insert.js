@@ -106,7 +106,7 @@ function tidyFrame(doc, frame) {
  */
 function finishFrame(doc, frame) {
   lastTidyFailures = lastTidyFailures.concat(neutralize(doc, frame));
-  lastChrome = describeChrome(doc, frame);
+  lastChrome = describeChrome(frame);
 }
 
 /** Problems from the most recent placement, if any. */
@@ -285,7 +285,6 @@ module.exports = {
   update,
   prepareAsset,
   discardAsset,
-  placeNew,
   replaceIn,
   isAnchored,
   lastPlacementWarnings,

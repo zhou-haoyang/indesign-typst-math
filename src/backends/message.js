@@ -73,4 +73,4 @@ function describeEvent(event) {
   return `data=${describe(event && event.data)} · event keys=[${eventKeys}]`;
 }
 
-module.exports = { extractMessage, describeEvent, safeParse, OURS };
+module.exports = { extractMessage, describeEvent };

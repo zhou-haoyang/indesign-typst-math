@@ -106,4 +106,4 @@ async function rerenderAll({ doc, render, preamble, engine, onProgress }) {
   return { total: found.length, updated: applied, failures };
 }
 
-module.exports = { rerenderAll, specForExisting, recordFor };
+module.exports = { rerenderAll };
