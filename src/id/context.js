@@ -93,22 +93,32 @@ function readAt(insertionPoint) {
  */
 function currentTarget() {
   const selection = tryGet(() => app.selection, []) || [];
-  if (selection.length === 1) {
-    const sel = selection[0];
-    // A selected text *frame* also exposes insertionPoints, but selecting a
-    // frame with the Selection tool is not text editing — inserting there would
-    // silently jump to the start of the story. Page items have geometric
-    // bounds; text ranges and insertion points do not.
-    const isPageItem = tryGet(() => sel.geometricBounds, null) != null;
-    if (isPageItem) return { kind: "frame", frame: sel };
-
-    const ips = tryGet(() => sel.insertionPoints, null);
-    if (ips && tryGet(() => ips.length, 0) > 0) {
-      return { kind: "text", insertionPoint: ips.item(0) };
-    }
-    if (tryGet(() => sel.parentStory, null)) return { kind: "text", insertionPoint: sel };
+  if (!selection.length) {
+    return { kind: "page", why: "nothing selected in the document" };
   }
-  return { kind: "page" };
+  if (selection.length > 1) {
+    return { kind: "page", why: `${selection.length} objects selected` };
+  }
+
+  const sel = selection[0];
+  const name = tryGet(() => sel.constructor.name, "unknown");
+  // A selected text *frame* also exposes insertionPoints, but selecting a frame
+  // with the Selection tool is not text editing — inserting there would
+  // silently jump to the start of the story. Page items have geometric bounds;
+  // text ranges and insertion points do not.
+  const isPageItem = tryGet(() => sel.geometricBounds, null) != null;
+  if (isPageItem) {
+    return { kind: "frame", frame: sel, why: `${name} selected as an object` };
+  }
+
+  const ips = tryGet(() => sel.insertionPoints, null);
+  if (ips && tryGet(() => ips.length, 0) > 0) {
+    return { kind: "text", insertionPoint: ips.item(0), why: `text cursor in ${name}` };
+  }
+  if (tryGet(() => sel.parentStory, null)) {
+    return { kind: "text", insertionPoint: sel, why: `text cursor (${name})` };
+  }
+  return { kind: "page", why: `${name} is neither text nor a page item` };
 }
 
 /** The insertion point an anchored frame hangs from, if it is anchored at all. */

@@ -232,7 +232,8 @@ async function commit() {
       setStatus(withWarnings(anchored
         ? `Inserted inline\ndepth ${result.metrics.depth.toFixed(2)} pt` +
           `\nY offset ${lastOffset()}`
-        : "Inserted on the page."), "", { sticky: true });
+        : `Inserted on the page — not anchored\nbecause: ${target.why || "unknown"}`),
+        "", { sticky: true });
       syncEditingUI();
     }
   } catch (err) {
