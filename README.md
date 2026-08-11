@@ -108,6 +108,14 @@ node tools/smoke-wasm-loading.mjs  # each wasm-loading strategy in isolation
 npm run test:indesign              # geometry, against a live InDesign
 ```
 
+InDesign is also drivable ad hoc, which is the fastest way to settle a question
+about its DOM:
+
+```sh
+node tools/probe-indesign.mjs                  # properties, anchoring, stroke
+node tools/probe-indesign.mjs --scratch 'return J({ n: frame.lines.length });'
+```
+
 `test:indesign` drives the running InDesign over AppleScript (`tools/id.mjs`),
 places real Typst PDFs in a scratch document and checks the whole chain: the
 PDF page box becomes the frame size, the frame's bottom edge sits on the text

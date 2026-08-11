@@ -7,6 +7,11 @@ place it into the document as an editable anchored object. Typst compiles
 in-plugin via WebAssembly; no `typst` binary is needed at runtime (though the CLI
 is used by the checks).
 
+**Before investigating anything that misbehaves inside InDesign, read
+"Debugging: measure, don't guess" below.** The application is scriptable from
+this shell, and most of the difficult bugs in this plugin's history were solved
+only after someone stopped reasoning about InDesign and measured it instead.
+
 ## Commands
 
 ```sh
@@ -32,26 +37,67 @@ removing and re-adding the plugin — Reload does not pick them up.** JS/CSS
 changes only need Reload. Getting this wrong looks exactly like a code bug: the
 panel loads but `entrypoints.setup()` throws "Could not find panel".
 
-## What the checks do and do not cover
+## Debugging: measure, don't guess
+
+**InDesign is drivable from this shell.** `tools/id.mjs` runs ExtendScript in
+the running app over AppleScript and returns JSON, so DOM questions are
+answerable in seconds:
+
+```sh
+node tools/probe-indesign.mjs                  # standard report: properties,
+                                               # anchoring geometry, stroke
+node tools/probe-indesign.mjs --scratch 'return J({ n: frame.lines.length });'
+node tools/probe-indesign.mjs 'J({ v: app.version })'
+```
+
+`--scratch` runs the snippet inside a throwaway document with `doc`, `page` and
+`frame` (a text frame containing text) in scope; it must `return` a JSON string,
+and the document is closed without saving. Two helpers are always available:
+`J(value)` serialises (ExtendScript has no `JSON`), and `probe(fn)` returns
+`{ok, value}` or `{ok: false, error}` — the way to ask *does this property even
+exist*.
+
+Reach for this first. Nearly every hard bug in this plugin was InDesign
+behaviour that contradicted the documentation, and several were guessed at
+three or four times — costing a screenshot round-trip each — when one probe
+would have settled them. If you catch yourself reasoning about what InDesign
+"should" do, stop and measure it.
+
+Two rules that follow from how those bugs hid:
+
+- **A tolerant read turns a missing property into silent no-op.** `tryGet(() =>
+  x.foo, null)` on a property that does not exist looks exactly like a property
+  that is legitimately absent. `PageItem.storyOffset` throws, and because every
+  call site swallowed it, three features did nothing at all for a long time
+  without a single error. When a feature mysteriously does nothing, probe the
+  properties it reads before re-reading its logic.
+- **Assignments can be refused without throwing.** Read the value back. See
+  `src/id/frame.js`, where the read-back is what exposed that assigning
+  `strokeWeight = 0` can *set it to 1*.
+
+### What the automated checks cover
 
 `src/` is not loadable by the headless tests: those modules `require("indesign")`,
-which exists only inside InDesign.
+which exists only inside InDesign. `npm run check` verifies module resolution,
+message parsing and the baseline solver's logic — not behaviour in the app.
+`npm run test:indesign` covers the placement geometry end to end against the
+live app. `src/ui/` still needs a human reloading the plugin.
 
-**But InDesign itself is drivable from the shell** — `tools/id.mjs` runs
-ExtendScript in the running app over AppleScript and returns JSON, so DOM
-questions ("does this property exist", "which way does this move") are
-answerable in seconds instead of by screenshot round-trip. `probe-indesign.mjs`
-is the scratchpad for that; `test-indesign.mjs` is the standing geometry test.
-Use it. Several bugs in this plugin survived multiple wrong guesses that one
-probe would have settled.
+The webview side (`webview/`) is fully covered, being plain browser code.
 
-Caveat: that channel is ExtendScript, not UXP. Layout behaviour is identical,
-but which properties are *exposed* can differ, so treat property-existence
-findings as strong evidence rather than proof for the plugin's own code.
+### When the panel itself misbehaves
 
-`src/ui/` still needs a human reloading the plugin.
+The webview has its own console, separate from the panel's, so a broken bridge
+looks like silence on both sides. Two readouts exist for that and are worth
+extending rather than deleting:
 
-The webview side (`webview/`) *is* covered, because it is plain browser code.
+- the webview's status line doubles as a bridge readout
+  (`bridge: uxpHost present · in 148 · out uxpHost`) until the panel acks;
+- the panel reports the frame's actual read-back state when placement
+  formatting fails, and the applied Y offset with its residual on every insert.
+
+Panel status messages are also `console.log`ged with a `[typst]` prefix, which
+survives the panel moving on.
 
 ## Architecture
 
@@ -138,7 +184,9 @@ copy/paste, so a pasted duplicate stays editable.
 
 ## Environment traps
 
-These cost several debugging rounds each and none reproduce outside UXP.
+These cost several debugging rounds each and none reproduce outside the host
+application. The InDesign ones are demonstrated by
+`node tools/probe-indesign.mjs`.
 
 - **`require` does not resolve directories** to `index.js`. Extensionless *file*
   paths are fine. `npm run check` guards this.
@@ -177,20 +225,6 @@ These cost several debugging rounds each and none reproduce outside UXP.
 - **Applying an object style resets anchored-object settings**, so anchoring is
   the very last thing `placeNew`/`replaceIn` do. A clean-up pass placed after
   `anchorInline` silently wiped the baseline offset.
-
-## Debugging approach
-
-The webview has its own console, separate from the panel's, so a broken bridge
-looks like silence on both sides. Two readouts exist for this and are worth
-extending rather than replacing:
-
-- the webview's status line doubles as a bridge readout
-  (`bridge: uxpHost present · in 148 · out uxpHost`) until the panel acks;
-- the panel reports the frame's actual read-back state when placement formatting
-  fails.
-
-When something InDesign-side misbehaves, add a readout rather than guessing —
-guessing has a poor track record here.
 
 ## Updating Typst
 
