@@ -110,9 +110,7 @@ control with no spacing — in seconds rather than a plugin reload.
 UI has actually had**: `gap` that works in Chrome and collapses in UXP, a
 `<button>` that ignores `background` and draws a native pill, a `<textarea>` in a
 hidden subtree that never becomes focusable, a `<textarea>` with no caret.
-Chrome has no `sp-*` components either, so those render from stand-in styles in
-the tool. Treat a clean screenshot as "my markup is sane", never as "this
-works".
+Treat a clean screenshot as "my markup is sane", never as "this works".
 
 And read its own caveat before believing a negative: `--window-size` sets the
 screenshot canvas, not the layout viewport, so the page is given an explicit
@@ -305,17 +303,23 @@ application. The InDesign ones are demonstrated by
   native pill that ignores `background`/`border`, so the tab strip is built from
   `<span>`s; a `<textarea>` that spends its life inside a `display: none`
   subtree never becomes editable, which is why the two editor tabs share one
-  textarea and swap its contents rather than hiding one; and **a plain
-  `<textarea>` shows no caret at all**. It accepts typing and looks entirely
-  normal otherwise, so it presents as a text box you can edit with no cursor in
-  it. Neither removing its `line-height` nor setting `caret-color` explicitly
-  brought one back — both were guesses, and both were wrong. What works is
-  `sp-textarea`. It is a custom element, so it needs its box stated explicitly
-  and owns its own padding; read and write it through the three helpers at the
-  top of `src/ui/panel.js` rather than reaching for `.value` directly. Its real
-  control is in a shadow root, so `font-family` on the host does not reach it —
-  `src/ui/editor-font.js` tries the host, `::part`, and a style injected into
-  the shadow root, and logs which was reachable.
+  textarea and swap its contents rather than hiding one.
+- **The editor caret, still open, and the most expensive thing here so far.** A
+  `<textarea>` set in `ui-monospace, SFMono-Regular, Menlo, monospace` accepts
+  typing, renders correctly and **draws no caret**. Removing its `line-height`
+  did nothing; setting `caret-color` explicitly did nothing; both were guesses
+  and both were wrong. Swapping to `sp-textarea` did bring the caret back, but
+  that component renders into a **closed** shadow root (`element.shadowRoot` is
+  `null`), so no monospace face reaches it by host inheritance, by `::part`, or
+  by injection — measured, not assumed. The current attempt is a `<textarea>`
+  named in fonts that certainly exist (`Menlo, Monaco, Consolas, monospace`),
+  on the theory that UXP mis-computes caret metrics from a leading entry it
+  cannot resolve. **If that fails, the element is the cause and the choice is a
+  real one — caret or monospace — so ask rather than pick.** The panel logs
+  `[typst] editor font: …` with the resolved family.
+  Read and write the widget through the three helpers at the top of
+  `src/ui/panel.js`, never `.value` directly; that is what has kept each of
+  these swaps to two files.
 - **One muted grey does not serve both themes.** Nothing here reacts to
   `prefers-color-scheme`; the panel reads `uxp.host.theme` and stamps
   `theme-dark`/`theme-light` on `<body>`, and the greys hang off that. Anything

@@ -59,14 +59,6 @@ function page(variant) {
      pinning down. */
   body { background: #4a4a4a; color: #f0f0f0; width: ${WIDTH}px; margin: 0; }
   webview { background: #fff; display: block; }
-  /* Chrome has no sp-* components, so they render as empty inline elements.
-     These stand-ins keep the shots readable; they say nothing about how the
-     real components look. */
-  sp-textarea {
-    background: #fff; color: #222; border: 1px solid #999; border-radius: 4px;
-    box-sizing: border-box; padding: 6px;
-  }
-  sp-textarea::after { content: attr(placeholder); color: #999; }
   textarea, select, input, button { font-size: 11px; }
   ${variant === "dialog" ? "dialog { display: block; position: static; }" : ""}
 </style></head><body class="theme-dark">

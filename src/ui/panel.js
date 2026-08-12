@@ -20,7 +20,6 @@ const { rerenderAll } = require("../id/rerender");
 const fonts = require("./fonts");
 const prefs = require("./prefs");
 const dialogs = require("./settings-dialog");
-const editorFont = require("./editor-font");
 
 const PREVIEW_DEBOUNCE_MS = 250;
 const SELECTION_POLL_MS = 700;
@@ -94,13 +93,13 @@ function setStatus(text, kind, options = {}) {
 /* ------------------------------------------------------------------ editor */
 
 /**
- * The editor widget is an `sp-textarea`, not a `<textarea>`: the plain element
- * draws no visible caret in this host. Everything that touches it goes through
- * these three, so replacing the widget again means changing them and the one
- * tag in index.html.
+ * Everything that touches the editor widget goes through these three, so that
+ * swapping it costs them plus the one tag in index.html. It has been a
+ * `<textarea>` and an `sp-textarea` and is currently the former; see panel.css
+ * for what the caret turns on.
  *
- * `placeholder` is set as an attribute because a custom element's property does
- * not necessarily reflect back to one.
+ * `placeholder` is set as an attribute rather than a property, because a custom
+ * element's property does not necessarily reflect back to one.
  */
 function editorText() {
   return el.editor.value || "";
@@ -713,11 +712,11 @@ async function start() {
   // Before anything is drawn: this picks the muted greys, and the panel is
   // unreadable against the wrong chrome.
   document.body.classList.add(`theme-${currentTheme()}`);
-  // Reported rather than assumed: whether a monospace face reaches inside an
-  // sp-textarea depends on the component, and the log names what was reachable
-  // so a failure does not cost another round of guessing.
-  console.log(`[typst] editor font: ${editorFont.applyMonospace(el.editor)}` +
-    ` · shadow: ${editorFont.describe(el.editor)}`);
+  // What the font stack actually resolved to. The editor's missing caret
+  // tracks the font rather than the element, as far as anything here can tell,
+  // so this is the readout that says whether UXP found what was asked for.
+  console.log("[typst] editor font: " +
+    tryGet(() => getComputedStyle(el.editor).fontFamily, "unreadable"));
   wireEvents();
   applyDefaults();
   syncEditingUI();

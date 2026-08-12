@@ -145,36 +145,38 @@ select {
   margin-top: var(--gap);
 }
 
-/* Both editors are sp-textarea, not <textarea>: the plain element draws no
-   visible caret in this host. A custom element needs its box stating
-   explicitly — it has no useful intrinsic size — and its padding and border
-   belong to the component, so nothing here sets them.
+/* The font stack here is load-bearing, and not for looks.
 
-   The monospace family is stated three times on purpose, because the real
-   control lives in a shadow root and which route reaches it depends on the
-   component: on the host in case it inherits, through ::part in case one is
-   exposed, and from src/ui/editor-font.js into the shadow root itself. Typst
-   source in a proportional face is the symptom when none of them land. */
+   A <textarea> in this host drew no caret while it was set in
+   `ui-monospace, SFMono-Regular, Menlo, monospace`. Swapping the element for
+   an sp-textarea brought the caret back — but that component renders into a
+   *closed* shadow root, so no monospace face can reach it, by host
+   inheritance, by ::part, or by injection. Neither trade is acceptable, and
+   the two reports differ in two variables at once: the element *and* the font.
+
+   `ui-monospace` and `SFMono-Regular` are Chromium/Apple-specific keywords. If
+   UXP cannot resolve the leading entries it may still paint text through a
+   fallback while computing caret metrics from the font it failed to find,
+   which would explain a textarea that types correctly with no visible cursor.
+   So this names fonts that exist on the machine, with the generic last.
+
+   If the caret is still missing, the element is the cause rather than the
+   font, and the honest choice is sp-textarea with a proportional face. The
+   panel logs what this actually resolved to. */
 #editor,
 #dlg-default-preamble {
-  display: block;
-  width: 100%;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
+  font-family: Menlo, Monaco, Consolas, monospace;
   caret-color: #1a1a1a;
-}
-
-#editor::part(input),
-#dlg-default-preamble::part(input),
-#editor::part(textarea),
-#dlg-default-preamble::part(textarea) {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
 }
 
 #editor {
   flex: 0 0 auto;
+  width: 100%;
   height: 84px;
   min-height: 48px;
+  resize: none;
   font-size: 12px;
+  padding: 6px;
 }
 
 #preview {
@@ -286,9 +288,15 @@ dialog {
   margin-bottom: var(--gap);
 }
 
+/* Explicit width: it sits inside a plain block rather than directly in the
+   flex column, so it would otherwise take the textarea `cols` default and stay
+   narrow however wide the dialog gets. */
 #dlg-default-preamble {
+  width: 100%;
   height: 72px;
+  resize: none;
   font-size: 11px;
+  padding: 6px;
 }
 
 #dlg-size-pt {
