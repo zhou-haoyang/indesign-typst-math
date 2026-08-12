@@ -145,16 +145,17 @@ select {
   margin-top: var(--gap);
 }
 
-/* caret-color, because it defaults to currentColor and nothing sets `color`
-   here: the textarea inherits UXP's panel text colour, which on the dark theme
-   is nearly white, while the control paints its own background white as soon as
-   it takes focus. The caret was being drawn white on white. The text is
-   unaffected — the native control colours that itself, which is why the box
-   looked perfectly normal apart from having no cursor.
-
-   No line-height either: UXP positions the caret from it and gets it wrong. */
+/* Both editors are sp-textarea, not <textarea>: the plain element draws no
+   visible caret in this host, and neither removing its line-height nor pinning
+   caret-color brought one back. A custom element needs its box stating
+   explicitly — it has no useful intrinsic size — and its padding and border
+   belong to the component, so nothing here sets them. Whether the monospace
+   family reaches the inner control depends on the component inheriting it. */
 #editor,
 #dlg-default-preamble {
+  display: block;
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   caret-color: #1a1a1a;
 }
 
@@ -162,10 +163,7 @@ select {
   flex: 0 0 auto;
   height: 84px;
   min-height: 48px;
-  resize: none;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
-  padding: 6px;
 }
 
 #preview {
@@ -277,16 +275,9 @@ dialog {
   margin-bottom: var(--gap);
 }
 
-/* Explicit width: it sits inside a plain block rather than directly in the
-   flex column, so it would otherwise size itself from the textarea `cols`
-   default and stay narrow however wide the dialog gets. */
 #dlg-default-preamble {
-  width: 100%;
   height: 72px;
-  resize: none;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
-  padding: 6px;
 }
 
 #dlg-size-pt {

@@ -109,8 +109,10 @@ control with no spacing — in seconds rather than a plugin reload.
 **It is not a test of the panel, and it is blind to the whole class of bug this
 UI has actually had**: `gap` that works in Chrome and collapses in UXP, a
 `<button>` that ignores `background` and draws a native pill, a `<textarea>` in a
-hidden subtree that never becomes focusable. Chrome shows none of those. Treat a
-clean screenshot as "my markup is sane", never as "this works".
+hidden subtree that never becomes focusable, a `<textarea>` with no caret.
+Chrome has no `sp-*` components either, so those render from stand-in styles in
+the tool. Treat a clean screenshot as "my markup is sane", never as "this
+works".
 
 And read its own caveat before believing a negative: `--window-size` sets the
 screenshot canvas, not the layout viewport, so the page is given an explicit
@@ -303,12 +305,14 @@ application. The InDesign ones are demonstrated by
   native pill that ignores `background`/`border`, so the tab strip is built from
   `<span>`s; a `<textarea>` that spends its life inside a `display: none`
   subtree never becomes editable, which is why the two editor tabs share one
-  textarea and swap its contents rather than hiding one; and a `<textarea>`
-  colours its own text natively but takes the **caret** from CSS
-  `currentColor`, so on the dark theme it drew a near-white caret on the white
-  background the control paints when focused. `caret-color` has to be set
-  explicitly. A control that looks entirely normal but has no visible cursor is
-  this.
+  textarea and swap its contents rather than hiding one; and **a plain
+  `<textarea>` shows no caret at all**. It accepts typing and looks entirely
+  normal otherwise, so it presents as a text box you can edit with no cursor in
+  it. Neither removing its `line-height` nor setting `caret-color` explicitly
+  brought one back — both were guesses, and both were wrong. What works is
+  `sp-textarea`. It is a custom element, so it needs its box stated explicitly
+  and owns its own padding; read and write it through the three helpers at the
+  top of `src/ui/panel.js` rather than reaching for `.value` directly.
 - **One muted grey does not serve both themes.** Nothing here reacts to
   `prefers-color-scheme`; the panel reads `uxp.host.theme` and stamps
   `theme-dark`/`theme-light` on `<body>`, and the greys hang off that. Anything

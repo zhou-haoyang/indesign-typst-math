@@ -90,6 +90,35 @@ function setStatus(text, kind, options = {}) {
   if (text && important) console.log(`[typst] ${text}`);
 }
 
+/* ------------------------------------------------------------------ editor */
+
+/**
+ * The editor widget is an `sp-textarea`, not a `<textarea>`: the plain element
+ * draws no visible caret in this host. Everything that touches it goes through
+ * these three, so replacing the widget again means changing them and the one
+ * tag in index.html.
+ *
+ * `placeholder` is set as an attribute because a custom element's property does
+ * not necessarily reflect back to one.
+ */
+function editorText() {
+  return el.editor.value || "";
+}
+
+function setEditorText(text) {
+  const value = text || "";
+  el.editor.value = value;
+  // The same rule this codebase applies to the InDesign DOM: an assignment can
+  // be refused without throwing, so read it back. sp-textarea also takes its
+  // value as content, and a silently ignored write here would look like
+  // selecting an equation failing to load its source.
+  if (editorText() !== value) el.editor.textContent = value;
+}
+
+function setEditorPlaceholder(text) {
+  el.editor.setAttribute("placeholder", text);
+}
+
 function describeDiagnostics(diagnostics) {
   return (diagnostics || [])
     .filter((d) => d.severity !== "info")
@@ -347,7 +376,7 @@ function loadRecord({ frame, record }) {
   // Selecting an equation is a request to see its source, so come back from the
   // preamble tab if that is where we were.
   switchTab("equation");
-  el.editor.value = state.body;
+  setEditorText(state.body);
   state.mode = record.mode === "display" ? "display" : "inline";
   el.mode.value = state.mode;
   if (record.size) {
@@ -460,13 +489,13 @@ const PLACEHOLDER = {
  */
 function switchTab(name) {
   if (state.tab === name) return;
-  if (state.tab === "preamble") state.preamble = el.editor.value;
-  else state.body = el.editor.value;
+  if (state.tab === "preamble") state.preamble = editorText();
+  else state.body = editorText();
 
   state.tab = name;
   const preamble = name === "preamble";
-  el.editor.value = preamble ? state.preamble : state.body;
-  el.editor.placeholder = PLACEHOLDER[name];
+  setEditorText(preamble ? state.preamble : state.body);
+  setEditorPlaceholder(PLACEHOLDER[name]);
   el.preambleActions.classList.toggle("hidden", !preamble);
   el.tabEquation.classList.toggle("active", !preamble);
   el.tabPreamble.classList.toggle("active", preamble);
@@ -476,7 +505,7 @@ function switchTab(name) {
 
 /** Show `text` in the editor when the tab it belongs to is the visible one. */
 function showInEditor(tab, text) {
-  if (state.tab === tab) el.editor.value = text;
+  if (state.tab === tab) setEditorText(text);
 }
 
 /* ---------------------------------------------------------------- defaults */
@@ -596,13 +625,13 @@ function bindElements() {
 function wireEvents() {
   el.editor.addEventListener("input", () => {
     if (state.tab === "preamble") {
-      state.preamble = el.editor.value;
+      state.preamble = editorText();
       // Editing it makes it this document's, whatever it started as.
       state.preambleFromDefault = false;
       syncPreambleUI();
       savePreamble();
     } else {
-      state.body = el.editor.value;
+      state.body = editorText();
     }
     requestPreview();
   });

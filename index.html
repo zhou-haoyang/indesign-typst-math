@@ -50,12 +50,16 @@
       <span id="tab-preamble" class="tab">Preamble<span id="preamble-dot" class="dot hidden">&#9679;</span></span>
     </div>
 
-    <!-- One textarea serves both tabs, swapping its contents. Two of them, with
+    <!-- One editor serves both tabs, swapping its contents. Two of them, with
          the inactive one display:none, left the preamble unfocusable: a UXP
          textarea that spends its life inside a hidden subtree never becomes
-         editable. One always-visible control cannot hit that. -->
-    <textarea id="editor" spellcheck="false" autocomplete="off"
-      placeholder="Typst math, e.g.  sum_(i=1)^n x_i / 2"></textarea>
+         editable. One always-visible control cannot hit that.
+
+         sp-textarea rather than <textarea>: the plain element draws no visible
+         caret in this host, and neither dropping its line-height nor pinning
+         caret-color brought one back. Reading and writing it goes through the
+         helpers in panel.js so that swapping the widget again is one change. -->
+    <sp-textarea id="editor" placeholder="Typst math, e.g.  sum_(i=1)^n x_i / 2"></sp-textarea>
 
     <div id="preamble-actions" class="row hidden">
       <button id="preamble-save-default" title="Use this preamble for new documents">Save as default</button>
@@ -104,8 +108,8 @@
       <div class="section">
         <span class="section-title">Default preamble</span>
         <span class="hint">Seeds any document that has none.</span>
-        <textarea id="dlg-default-preamble" spellcheck="false" autocomplete="off"
-          placeholder="#let vb(x) = math.bold(x)"></textarea>
+        <sp-textarea id="dlg-default-preamble"
+          placeholder="#let vb(x) = math.bold(x)"></sp-textarea>
       </div>
 
       <div class="section">

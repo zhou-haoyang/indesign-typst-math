@@ -125,7 +125,7 @@ function wire() {
   });
 
   el.defaultPreamble.addEventListener("input", () => {
-    deps.onDefaults(prefs.write({ defaultPreamble: el.defaultPreamble.value }));
+    deps.onDefaults(prefs.write({ defaultPreamble: el.defaultPreamble.value || "" }));
   });
 
   const writeEquationDefault = (patch) => {
