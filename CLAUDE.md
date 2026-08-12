@@ -136,8 +136,18 @@ is noise at best and alarming at worst. Both consoles carry a `[typst]` prefix.
   residual across a re-render pass, and which wasm strategy won at startup.
 
 Panel status messages are `console.log`ged too, which survives the panel moving
-on. What reaches the status line itself is what the user can act on: an error,
-a note about the context, or one word confirming the placement.
+on.
+
+**An operation that succeeded says nothing.** The equation appearing in the
+document is the feedback, and a panel that announces every success trains
+people to ignore the line the failures also arrive on. So the status line
+carries errors, progress while something is running, notes about the render
+(a spot colour approximated, a preamble that has moved on), and exactly two
+things that are neither success nor failure: that a placement landed on the
+page rather than inline, and that a re-render found nothing to do — both of
+which are otherwise indistinguishable from the command not working. Anything
+set while busy must be taken down by `setBusy(false)`, or a silent success
+leaves "Inserting…" on screen reading as a hang.
 
 ## Architecture
 

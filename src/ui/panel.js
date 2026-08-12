@@ -221,21 +221,32 @@ const requestPreview = debounce(async () => {
 /* ------------------------------------------------------------ insert/update */
 
 /**
- * Append anything the placement could not apply. Frame formatting can be
- * refused without throwing, and silently leaving a stroke around every
- * equation is the kind of thing that should announce itself.
+ * Report a placement, which means saying nothing when it worked: the equation
+ * appearing in the document is the feedback, and a line of praise for every
+ * insert is one more thing to read and dismiss.
+ *
+ * What is left is what went wrong. Frame formatting can be refused without
+ * throwing, and silently leaving a stroke around every equation is the kind of
+ * thing that should announce itself — it draws a box, and its weight shifts the
+ * equation off the baseline by half of it.
+ *
+ * @param {string} note Something worth saying even though nothing failed, i.e.
+ *   that the equation did not go where it was probably meant to.
  */
-function withWarnings(message) {
+function reportPlacement(note) {
   const warnings = lastPlacementWarnings();
-  if (!warnings.length) return message;
-  // Which object refused what, and what the frame reads back as, is what fixes
-  // this — the frame, the graphic inside it and the applied style can each draw
-  // a box — and it is a wall of property names to anyone else. So the panel says
-  // that it happened and the console says what happened.
-  console.log(`[typst] could not clear: ${warnings.join("; ")}`);
-  console.log(`[typst] frame reads back as: ${lastFrameChrome()}`);
-  return `${message}\nSome of the frame's formatting could not be cleared, ` +
-    "so it may show a box or sit slightly off the baseline.";
+  if (warnings.length) {
+    // Which object refused what, and what the frame reads back as, is what
+    // fixes this — the frame, the graphic inside it and the applied style can
+    // each draw a box — and it is a wall of property names to anyone else.
+    console.log(`[typst] could not clear: ${warnings.join("; ")}`);
+    console.log(`[typst] frame reads back as: ${lastFrameChrome()}`);
+  }
+  const text = [note, warnings.length
+    ? "Some of the frame's formatting could not be cleared, " +
+      "so it may show a box or sit slightly off the baseline."
+    : ""].filter(Boolean).join("\n");
+  if (text) setStatus(text, warnings.length ? "error" : "", { sticky: true });
 }
 
 function buildRecord(spec, metrics) {
@@ -291,7 +302,7 @@ async function commit() {
         asset: result.asset, metrics: result.metrics, record,
       });
       state.editing.record = record;
-      setStatus(withWarnings("Updated."), "", { sticky: true });
+      reportPlacement("");
     } else {
       const target = context.currentTarget();
       const { frame, anchored } = await insert({
@@ -309,10 +320,12 @@ async function commit() {
           ? "above the line"
           : `inline, depth ${result.metrics.depth.toFixed(2)} pt, Y offset ${lastOffset()}`;
       console.log(`[typst] inserted ${how}`);
-      setStatus(withWarnings(anchored
-        ? "Inserted."
-        : "Inserted on the page. To place one inline, put the text cursor in the text first."),
-        "", { sticky: true });
+      // Landing on the page is not a failure, but it is not what someone
+      // reaching for an inline equation asked for, so it is the one placement
+      // outcome still worth a line.
+      reportPlacement(anchored
+        ? ""
+        : "Inserted on the page. To place one inline, put the text cursor in the text first.");
       syncEditingUI();
     }
   } catch (err) {
@@ -326,6 +339,10 @@ function setBusy(busy, message) {
   state.busy = busy;
   el.insert.disabled = busy || !state.lastMetrics;
   if (busy && message) setStatus(message, "busy");
+  // Now that finishing is silent, whoever set "Inserting…" has to take it down
+  // again or it stands there reading as a hang. Only a busy message is cleared:
+  // an error raised in between is the thing we stayed quiet to make room for.
+  else if (!busy && el.status.className.includes("busy")) setStatus("");
 }
 
 /* --------------------------------------------------------------- selection */
@@ -472,8 +489,14 @@ async function reloadFonts(announce) {
     setBusy(true, "Loading fonts…");
     try {
       await backend.setFonts(data);
-      const missing = dropped.length ? ` (${dropped.length} missing)` : "";
-      setStatus(data.length ? `${names.length} font file(s) loaded${missing}.` : "Typst defaults only.");
+      console.log(`[typst] ${names.length} font file(s) loaded` +
+        `${dropped.length ? `, ${dropped.length} missing` : ""}`);
+      // A font whose file has moved is the only half of this worth saying: it
+      // has just been dropped from the list, and the maths it was setting will
+      // quietly come back in a different face.
+      if (dropped.length) {
+        setStatus(`Could not read ${dropped.join(", ")} — removed from the list.`, "error");
+      }
     } catch (err) {
       setStatus(String((err && err.message) || err), "error");
       throw err;
@@ -591,10 +614,14 @@ async function rerenderAllNow({ toDialog = false } = {}) {
     const blind = summary.unmeasured ? `, ${summary.unmeasured} unmeasured` : "";
     console.log(`[typst] re-rendered ${summary.updated} of ${summary.total}` +
       `${failed}${alignment}${blind}`);
-    report(summary.total
-      ? `Re-rendered ${summary.updated} of ${summary.total}${failed}`
-      : "No Typst equations in this document.",
-      summary.failures.length ? "error" : "");
+    // A pass that worked shows itself: every equation in the document redraws.
+    // What it cannot show is one that was skipped, or a document where it found
+    // nothing to do — which from the outside is identical to it never running.
+    if (summary.failures.length) {
+      report(`Re-rendered ${summary.updated} of ${summary.total}${failed}`, "error");
+    } else if (!summary.total) {
+      report("No Typst equations in this document.", "");
+    }
   } catch (err) {
     report(String((err && err.message) || err), "error");
   } finally {
@@ -707,8 +734,8 @@ function wireEvents() {
   el.insert.addEventListener("click", commit);
   el.revert.addEventListener("click", () => {
     if (!state.editing) return;
+    // The editor's contents changing back is the confirmation.
     loadRecord(state.editing);
-    setStatus("Reverted to the stored expression.");
   });
 
   el.settingsToggle.addEventListener("click", () => dialogs.showSettings());
@@ -718,7 +745,13 @@ function wireEvents() {
 
   el.preambleSaveDefault.addEventListener("click", () => {
     prefs.write({ defaultPreamble: state.preamble });
-    setStatus("Saved as your default preamble for new documents.");
+    // Silence has to mean it worked, and `prefs.write` swallows a refused
+    // `setItem` — localStorage is a cache Adobe reserves the right to drop. So
+    // read it back rather than trust the call, exactly as the InDesign side
+    // does with a property assignment.
+    if (prefs.read().defaultPreamble !== state.preamble) {
+      setStatus("Could not save the default preamble.", "error");
+    }
   });
   el.preambleResetDefault.addEventListener("click", () => {
     state.preamble = prefs.read().defaultPreamble;
