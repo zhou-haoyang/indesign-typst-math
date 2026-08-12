@@ -88,9 +88,16 @@ testing a copy of it, and it is how the enum-comparison bug below was found.
 The route is osascript → ExtendScript → `app.doScript(..., UXPSCRIPT)`, because
 AppleScript refuses a `.idjs` directly. `tools/uxp.mjs` wraps it.
 
-Not covered: `src/ui/` (the panel controller), which still needs a human
-reloading the plugin. Everything under `webview/` is covered by the browser
-suite, being plain browser code.
+It also exercises the document preamble through the real DOM, which is the one
+thing a mock cannot prove: `extractLabel` returns `""` both for a key that was
+never set and for one holding an empty preamble.
+
+Not covered: `src/ui/panel.js` and `src/ui/settings-dialog.js` (the controller
+and the modal), which still need a human reloading the plugin — though
+`src/ui/prefs.js` and the preamble envelope are covered headless by
+`tools/test-prefs.mjs`, which stubs `localStorage` and the `indesign` module.
+Everything under `webview/` is covered by the browser suite, being plain browser
+code.
 
 ### When the panel itself misbehaves
 
@@ -109,8 +116,11 @@ survives the panel moving on.
 ## Architecture
 
 ```
-index.html + main.js   panel shell and entrypoint
-src/ui/panel.js        controller: editor, live preview, insert/update, settings
+index.html + main.js   panel shell, entrypoints, flyout menu
+src/ui/panel.js        controller: editor, live preview, insert/update, tabs
+src/ui/settings-dialog.js  the modal: fonts, defaults, engine info
+src/ui/prefs.js        per-user settings in localStorage
+src/ui/fonts.js        per-user extra font files
 src/backends/          rendering-backend contract + the Typst client
 src/id/                everything touching the InDesign DOM
 webview/               the wasm compiler host, and the preview surface
@@ -121,6 +131,43 @@ No bundler; the folder loads into UXP as-is. **Panel code is CommonJS, webview
 code is ESM.** They cannot share modules — `webview/template.js` is duplicated in
 Python inside `tools/validate-template.py` on purpose, so the check is an
 independent implementation.
+
+### Surfaces, and why settings are split the way they are
+
+Three scopes, three homes, and the split is deliberate:
+
+| Scope | Where it lives | Read by |
+| --- | --- | --- |
+| per equation | JSON on the frame's script label | `src/id/label.js` |
+| per document | JSON envelope on the document's label | `readDocumentPreamble` |
+| per user | `localStorage` | `src/ui/prefs.js`, `src/ui/fonts.js` |
+
+**A modal dialog draws over the panel, so nothing that wants live preview can
+live in one.** That is the whole reason the document preamble is a *tab* in the
+panel rather than a section of the settings dialog: you edit `#let` macros and
+`#set text(font: …)` while watching the preview. Fonts, the personal default
+preamble and the new-equation defaults need no such feedback, so they are in the
+dialog. Before moving anything between the two, check which side of that line it
+falls on.
+
+The preamble is per-document so a `.indd` still re-renders identically on someone
+else's machine; the per-user default only *seeds* a document that has never had
+one. That seeding is why `readDocumentPreamble` returns `{text, present}` rather
+than a string — see the trap about `extractLabel` below.
+
+InDesign offers a short menu of surfaces, and the ones not used here were
+measured or researched rather than assumed:
+
+- **panel flyout** (`menuItems` + `invokeMenu` in `main.js`) — runtime only, no
+  manifest change. Static items only: InDesign does not reliably honour mutating
+  a flyout after registration.
+- **command entrypoints** — Plug-Ins ▸ Typst Math. A command has no webview of
+  its own, so it reaches the compiler only through the panel's; `ensureCompiler`
+  in `panel.js` waits a moment and then says so rather than hanging.
+- **a second panel** — rejected. Adobe's model shares the *same* HTML document
+  and JS context, so it buys no isolation, and InDesign has open bugs where the
+  wrong panel loads and flyouts attach to the wrong panel.
+- **right-click menu items** — do not work; see the trap below.
 
 ### The webview does double duty
 
@@ -229,6 +276,23 @@ application. The InDesign ones are demonstrated by
 - **Stroke weight is alignment-critical.** InDesign anchors the
   *stroke-inclusive* bottom edge to the baseline, so any weight shifts an
   equation by half of it — even with colour None, when nothing is visible.
+- **A flyout `menuItems` entry without an `id` takes the commands down with it.**
+  Every item needs one, *including a separator* — `{label: "-"}` is rejected with
+  "'id' should be defined in menuItem object". Because `entrypoints.setup` may
+  only be called once, the whole call fails, so the `commands` registered
+  alongside the panel never register either: the menu items still appear (the
+  manifest declares them) and simply do nothing. `main.js` now falls back to
+  registering without the flyout rather than losing both.
+- **`ScriptMenuAction` callbacks never fire in UXP.** `app.scriptMenuActions.add`,
+  `addEventListener("onInvoke", …)` and `menus.item("Layout Context Menu")
+  .menuItems.add(action)` all succeed, `eventListeners.length` reports the
+  listeners, the action survives across script runs — and the handler is never
+  called. Not synchronously, not later, not for `afterInvoke` or `beforeDisplay`,
+  not with the listener on `app` instead, not when invoked through the menu
+  item's `associatedMenuAction`. **The identical sequence in ExtendScript fires
+  correctly**, which is how this was pinned down. So a plugin cannot put a
+  working item on a context menu this way; use the flyout or a command
+  entrypoint. (Measured on 21.4.1.4.)
 - **UXP enum values do not compare with `===`.** `swatch.space` and
   `ColorSpace.CMYK` both stringify to "CMYK" and are still not equal, so a
   direct comparison silently fails every branch — which is how "match text

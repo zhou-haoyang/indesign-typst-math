@@ -34,13 +34,32 @@ will land. `Cmd/Ctrl+Enter` inserts.
 | **Style** | `Inline` anchors on the baseline; `Display` anchors above the line, centred |
 | **Size** | `Match text` reads the point size at the cursor; `Fixed` uses the value you set |
 | **Colour** | `Match text` reads the fill of the text at the cursor, CMYK values included |
-| **Document preamble** | Typst prelude shared by every equation in the document — `#let` macros, `#set text(font: …)`, `#show` rules |
-| **Fonts** | Extra `.otf`/`.ttf` files handed to the compiler, so maths can match a document set in something other than Typst's defaults |
-| **Re-render all** | Recompiles every equation in the document |
+| **Preamble** tab | Typst prelude shared by every equation in *this document* — `#let` macros, `#set text(font: …)`, `#show` rules |
 
 To edit an equation, select it: the panel loads its source, and the button
 becomes **Update**. Updating re-renders into the same frame, so its anchor point
 in the text never moves.
+
+### Settings
+
+The panel keeps the tight loop — type, look, insert — and everything else lives
+one step away. The **⚙** button and the panel's flyout menu (**≡**) both open
+**Settings**; the same actions are under **Plug-Ins ▸ Typst Math** so they work
+without the panel open.
+
+| Setting | Scope |
+| --- | --- |
+| **Fonts** | Extra `.otf`/`.ttf` files handed to the compiler, so maths can match a document set in something other than Typst's defaults. Per user |
+| **Default preamble** | Seeds any document that has never had one. Per user |
+| **New equations start as** | The style, size and colour a fresh equation opens with, instead of resetting every time the panel reloads. Per user |
+| **Re-render all** | Recompiles every equation in the document |
+
+The preamble stays in the panel rather than moving into Settings because a modal
+dialog covers the preview, and editing macros is exactly when you want to watch
+the result. It belongs to the document, not to you, so a file sent to a colleague
+still renders the same; your personal default only fills in a document that has
+none, and is written into that document when you insert the first equation. The
+**•** on the Preamble tab means this document carries one.
 
 ## How it sits in the document
 
@@ -86,9 +105,15 @@ webview/     the compiler host and preview surface — real Chromium, so wasm an
              SVG work; also where the Typst source template lives
 src/backends/ the rendering-backend contract, and the Typst client
 src/id/      everything that touches the InDesign DOM
-src/ui/      panel controller, styles, font management
+src/ui/      panel controller, settings dialog, styles, fonts and preferences
 tools/       headless checks (see below)
 ```
+
+Settings live in three scopes and three places: per equation on the frame's
+script label, per document on the document's label (the preamble), and per user
+in `localStorage` (fonts, defaults). A modal dialog draws over the panel, so
+anything that needs the live preview has to stay in the panel — that line is
+what decides where a new setting goes.
 
 Rendering sits behind a small backend contract (`src/backends/index.js`) that
 returns an `asset` plus `{width, height, depth}`, rather than assuming a PDF —

@@ -196,6 +196,27 @@ const result = await runUxp(driver(`
       notes: read.notes,
     });
 
+    // The document preamble, through the real DOM. The unit test mocks
+    // insertLabel/extractLabel, and the behaviour that matters is exactly what
+    // a mock cannot prove: InDesign returns "" both for a key that was never
+    // set and for one holding an empty preamble, so the panel can only tell
+    // "never had one" from "cleared on purpose" if the envelope survives a
+    // real round trip.
+    const labels = require("./src/id/label.js");
+    const preambleFresh = labels.readDocumentPreamble(doc);
+    labels.writeDocumentPreamble(doc, "");
+    const preambleEmptied = labels.readDocumentPreamble(doc);
+    labels.writeDocumentPreamble(doc, "#let vb(x) = math.bold(x)");
+    const preambleSet = labels.readDocumentPreamble(doc);
+    results.push({
+      kind: "preamble",
+      freshPresent: preambleFresh.present,
+      emptiedPresent: preambleEmptied.present,
+      emptiedText: preambleEmptied.text,
+      setPresent: preambleSet.present,
+      setText: preambleSet.text,
+    });
+
     // No text target: must land on the page rather than refuse.
     const c0 = cases[0];
     const floated = withPoints(doc, () =>
@@ -236,6 +257,19 @@ for (const r of result.results) {
       fail(`colour values ${JSON.stringify(r.colorValues)}, expected [0,100,0,0]`);
     }
     if (r.notes && r.notes.length) fail(`unexpected notes: ${r.notes.join("; ")}`);
+    continue;
+  }
+
+  if (r.kind === "preamble") {
+    console.log(`\n[preamble] document label, absent vs empty vs set`);
+    const before = failures;
+    if (r.freshPresent !== false) fail("a fresh document reports a preamble it has never had");
+    if (r.emptiedPresent !== true) fail("a deliberately emptied preamble reads as absent, so it would be re-seeded");
+    if (r.emptiedText !== "") fail(`emptied preamble read back as ${JSON.stringify(r.emptiedText)}`);
+    if (r.setPresent !== true || r.setText !== "#let vb(x) = math.bold(x)") {
+      fail(`set preamble read back as ${JSON.stringify(r.setText)}`);
+    }
+    if (failures === before) console.log("     all three states distinguishable");
     continue;
   }
 

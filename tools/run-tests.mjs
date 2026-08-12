@@ -27,6 +27,7 @@ const SUITES = {
       ["module resolution", "node", ["tools/check-requires.mjs"]],
       ["message envelopes", "node", ["tools/test-messages.mjs"]],
       ["baseline solver", "node", ["tools/test-baseline-offset.mjs"]],
+      ["settings storage", "node", ["tools/test-prefs.mjs"]],
     ],
   },
   render: {

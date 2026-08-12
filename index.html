@@ -35,34 +35,33 @@
       <button id="settings-toggle" class="icon" title="Settings">&#9881;</button>
     </div>
 
+    <!-- Tabs rather than a drawer: the preamble needs the live preview below it
+         just as much as the equation does, and the drawer this replaced was a
+         sibling in this flex column, so opening it halved the webview. -->
+    <div class="tabs">
+      <button id="tab-equation" class="tab active">Equation</button>
+      <button id="tab-preamble" class="tab">Preamble<span id="preamble-dot" class="dot hidden">&#9679;</span></button>
+    </div>
+
     <textarea id="editor" spellcheck="false" autocomplete="off"
       placeholder="Typst math, e.g.  sum_(i=1)^n x_i / 2"></textarea>
+
+    <div id="preamble-pane" class="pane hidden">
+      <textarea id="preamble" spellcheck="false" autocomplete="off"
+        placeholder='#let vb(x) = math.bold(x)&#10;#set text(font: "New Computer Modern")'></textarea>
+      <div class="pane-actions">
+        <button id="preamble-save-default" title="Use this preamble for new documents">Save as my default</button>
+        <button id="preamble-reset-default" title="Replace this document's preamble with your default">Reset to my
+          default</button>
+      </div>
+      <span id="preamble-hint" class="hint"></span>
+    </div>
 
     <!-- Local content must be addressed with the plugin: protocol; a relative
          path silently loads nothing. Needs requiredPermissions.webview
          .allowLocalRendering = "yes" (UXP 8+; InDesign 21.4 ships UXP 9.3). -->
     <webview id="preview" src="plugin:/webview/index.html" height="100%" width="100%"
       uxpAllowInspector="true"></webview>
-
-    <div id="settings" class="settings hidden">
-      <div class="settings-row">
-        <label for="preamble">Document preamble</label>
-        <span class="hint">Shared by every equation in this document</span>
-      </div>
-      <textarea id="preamble" spellcheck="false" autocomplete="off"
-        placeholder='#let vb(x) = math.bold(x)&#10;#set text(font: "New Computer Modern")'></textarea>
-      <div class="settings-row">
-        <label>Fonts</label>
-        <span class="hint">Added to the compiler alongside the Typst defaults</span>
-      </div>
-      <ul id="font-list" class="font-list"></ul>
-      <div class="settings-actions">
-        <button id="add-fonts">Add font files…</button>
-        <button id="clear-fonts">Clear</button>
-        <span class="spacer"></span>
-        <button id="rerender-all">Re-render all in document</button>
-      </div>
-    </div>
 
     <!-- Its own full-width row: placement diagnostics run to several lines and
          are unreadable squeezed beside the buttons. -->
@@ -73,6 +72,71 @@
       <button id="insert" class="cta" disabled>Insert</button>
     </div>
   </div>
+
+  <!-- Both dialogs must be in the DOM before showModal(); UXP throws on a
+       detached element, and neither is removed on close, so they are reused.
+       Note that UXP remembers a dialog's geometry against its id — if a size
+       change appears to do nothing, change the id. -->
+  <dialog id="settings-dialog">
+    <div class="dlg">
+      <div class="settings-row">
+        <label>Fonts</label>
+        <span class="hint">Added to the compiler alongside the Typst defaults</span>
+      </div>
+      <ul id="dlg-font-list" class="font-list"></ul>
+      <div class="settings-actions">
+        <button id="dlg-add-fonts">Add font files&hellip;</button>
+        <button id="dlg-clear-fonts">Clear</button>
+        <span class="spacer"></span>
+        <span class="hint">Changing these rebuilds the compiler</span>
+      </div>
+
+      <div class="settings-row">
+        <label for="dlg-default-preamble">Default preamble</label>
+        <span class="hint">Seeds any document that has none</span>
+      </div>
+      <textarea id="dlg-default-preamble" spellcheck="false" autocomplete="off"
+        placeholder="#let vb(x) = math.bold(x)"></textarea>
+
+      <div class="settings-row">
+        <label>New equations start as</label>
+      </div>
+      <div class="settings-actions">
+        <select id="dlg-mode">
+          <option value="inline">Inline</option>
+          <option value="display">Display</option>
+        </select>
+        <select id="dlg-size-mode">
+          <option value="auto">Match text</option>
+          <option value="fixed">Fixed</option>
+        </select>
+        <input type="number" id="dlg-size-pt" min="1" max="600" step="0.5" value="10" title="Point size">
+        <select id="dlg-color-mode">
+          <option value="auto">Match text</option>
+          <option value="black">Black</option>
+        </select>
+      </div>
+
+      <div id="dlg-engine" class="hint"></div>
+      <!-- The dialog needs its own readout: it covers the panel's status line,
+           and the file picker and the compiler rebuild both happen from here. -->
+      <div id="dlg-status" class="status"></div>
+      <div class="settings-actions">
+        <span class="spacer"></span>
+        <button id="dlg-done" class="cta">Done</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="message-dialog">
+    <div class="dlg">
+      <div id="msg-text" class="status"></div>
+      <div class="settings-actions">
+        <span class="spacer"></span>
+        <button id="msg-ok" class="cta">OK</button>
+      </div>
+    </div>
+  </dialog>
 
   <script src="main.js"></script>
 </body>

@@ -30,6 +30,7 @@ body {
 
 .toolbar,
 .statusbar,
+.pane-actions,
 .settings-actions {
   display: flex;
   align-items: center;
@@ -68,7 +69,53 @@ select {
   width: 58px;
 }
 
-#editor {
+/* Tabs */
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  flex: 0 0 auto;
+  padding-bottom: 4px;
+}
+
+.tab {
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  padding: 2px 8px;
+  color: var(--muted);
+}
+
+.tab.active {
+  color: inherit;
+  border-bottom-color: var(--accent);
+}
+
+/* Marks a document that carries a preamble, so it is discoverable from the
+   Equation tab that one is in force. */
+.dot {
+  color: var(--accent);
+  padding-left: 4px;
+}
+
+.pane {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hint {
+  color: var(--muted);
+}
+
+.hint:empty {
+  display: none;
+}
+
+#editor,
+#preamble {
   flex: 0 0 auto;
   height: 84px;
   min-height: 48px;
@@ -128,36 +175,42 @@ button.icon {
   display: none;
 }
 
-/* Settings drawer */
+/* Settings dialog.
 
-.settings {
-  flex: 0 0 auto;
-  border-top: 1px solid var(--border);
-  margin-top: var(--pad);
-  padding-top: var(--pad);
+   Everything here is out of the panel's flex column on purpose: these are
+   per-user settings that need no live preview, and while they lived in a
+   drawer inside the panel they competed with the webview for height. */
+
+dialog {
+  padding: var(--pad);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.dlg {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  max-height: 46%;
-  overflow: auto;
+  gap: var(--gap);
+  min-width: 300px;
 }
 
 .settings-row {
   display: flex;
   align-items: baseline;
   gap: var(--gap);
+  margin-top: 4px;
 }
 
-.settings .hint {
-  color: var(--muted);
-}
-
-#preamble {
+#dlg-default-preamble {
   height: 72px;
   resize: none;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
   padding: 6px;
+}
+
+#dlg-size-pt {
+  width: 58px;
 }
 
 .font-list {
@@ -170,6 +223,9 @@ button.icon {
 }
 
 .font-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
   padding: 1px 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
@@ -177,4 +233,9 @@ button.icon {
 .font-list li.empty {
   font-family: inherit;
   font-style: italic;
+}
+
+.font-list button {
+  min-width: 20px;
+  padding: 0 4px;
 }

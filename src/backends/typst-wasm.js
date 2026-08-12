@@ -41,6 +41,8 @@ const readyPromise = new Promise((resolve, reject) => {
   readyReject = reject;
 });
 let readyTimer = null;
+/** The resolved value, so callers can ask without awaiting a 60s timeout. */
+let readyValue = null;
 
 function post(message) {
   if (!webview) throw new Error("preview is not attached yet");
@@ -85,8 +87,12 @@ function onMessage(event) {
     settled = true;
     // Tell the webview to stop re-announcing and drop its bridge readout.
     try { post({ type: "ack" }); } catch { /* nothing to lose */ }
-    if (msg.error) readyReject(new Error(msg.error));
-    else readyResolve({ engine: msg.engine, wasmSource: msg.wasmSource });
+    if (msg.error) {
+      readyReject(new Error(msg.error));
+    } else {
+      readyValue = { engine: msg.engine, wasmSource: msg.wasmSource };
+      readyResolve(readyValue);
+    }
     return;
   }
   const entry = pending.get(msg.id);
@@ -138,6 +144,16 @@ const backend = {
 
   ready() {
     return readyPromise;
+  },
+
+  /**
+   * Whether the compiler is up *right now*, without awaiting.
+   * A menu command has no webview of its own — the compiler lives in the
+   * panel's — so it needs to be able to ask rather than hang for the ready
+   * timeout when the panel was never opened.
+   */
+  isReady() {
+    return !!readyValue;
   },
 
   setTheme(theme) {

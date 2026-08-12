@@ -64,12 +64,32 @@ function hash(text) {
   return (h >>> 0).toString(36);
 }
 
+/**
+ * The document's preamble, and whether the document has one *at all*.
+ *
+ * The distinction matters because the panel seeds a document that has never had
+ * a preamble from the user's personal default. `extractLabel` returns "" both
+ * for a key that was never set and for one deliberately cleared, so without the
+ * envelope a preamble you emptied on purpose would be re-seeded from your
+ * default on every panel reload — the setting would appear not to stick.
+ *
+ * Documents written before the envelope hold bare text, which reads back as
+ * present; there is nothing to migrate, since the next write upgrades them.
+ *
+ * @returns {{text: string, present: boolean}}
+ */
 function readDocumentPreamble(doc) {
-  return tryGet(() => doc.extractLabel(DOC_PREAMBLE_KEY), "") || "";
+  const raw = tryGet(() => doc.extractLabel(DOC_PREAMBLE_KEY), "") || "";
+  if (!raw) return { text: "", present: false };
+  try {
+    const box = JSON.parse(raw);
+    if (box && box.v) return { text: String(box.text || ""), present: true };
+  } catch { /* legacy: written as bare text before the envelope existed */ }
+  return { text: raw, present: true };
 }
 
 function writeDocumentPreamble(doc, text) {
-  doc.insertLabel(DOC_PREAMBLE_KEY, text || "");
+  doc.insertLabel(DOC_PREAMBLE_KEY, JSON.stringify({ v: 1, text: text || "" }));
 }
 
 /** Every equation frame in the document, in story order where that applies. */
@@ -90,4 +110,5 @@ module.exports = {
   readDocumentPreamble,
   writeDocumentPreamble,
   findAll,
+  hash,
 };

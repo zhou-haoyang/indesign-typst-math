@@ -94,8 +94,21 @@ function clear() {
   writeTokens([]);
 }
 
+/**
+ * Drop one remembered font, by its position in `names()`.
+ * By index rather than by name because the same file name can legitimately
+ * appear twice, from two different folders.
+ */
+function remove(index) {
+  const tokens = readTokens();
+  if (index < 0 || index >= tokens.length) return false;
+  tokens.splice(index, 1);
+  writeTokens(tokens);
+  return true;
+}
+
 function names() {
   return readTokens().map((t) => t.name);
 }
 
-module.exports = { pick, load, clear, names };
+module.exports = { pick, load, clear, remove, names };

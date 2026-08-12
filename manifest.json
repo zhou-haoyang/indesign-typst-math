@@ -69,6 +69,20 @@
           ]
         }
       ]
+    },
+    {
+      "type": "command",
+      "id": "typstSettings",
+      "label": {
+        "default": "Typst Math Settings…"
+      }
+    },
+    {
+      "type": "command",
+      "id": "typstRerenderAll",
+      "label": {
+        "default": "Re-render all Typst equations"
+      }
     }
   ],
   "icons": [

@@ -18,18 +18,30 @@ const {
 } = require("../id/insert");
 const { rerenderAll } = require("../id/rerender");
 const fonts = require("./fonts");
+const prefs = require("./prefs");
+const dialogs = require("./settings-dialog");
 
 const PREVIEW_DEBOUNCE_MS = 250;
 const SELECTION_POLL_MS = 700;
+/** How long a menu command waits for a compiler that is still starting. */
+const COMPILER_GRACE_MS = 3000;
 
 const state = {
   engine: "",
+  wasmSource: "",
+  tab: "equation",
   mode: "inline",
   sizeMode: "auto",
   sizePt: 10,
   colorMode: "auto",
   preamble: "",
   preambleDoc: null,
+  /**
+   * True while the preamble on screen came from the user's default rather than
+   * from this document. It is not written to the document until it is edited or
+   * an equation is inserted, so that merely opening a document never dirties it.
+   */
+  preambleFromDefault: false,
   /** {frame, record} when a labelled equation is selected. */
   editing: null,
   /** Metrics from the most recent successful preview. */
@@ -130,6 +142,20 @@ function currentSpec() {
 
 /* ----------------------------------------------------------------- preview */
 
+/**
+ * A note when the selected equation was built against a different preamble.
+ *
+ * This is what `record.preambleHash` is for: the artwork is a snapshot, so
+ * after a preamble edit the placed equation and the preview legitimately
+ * disagree until a re-render. Without saying so, that looks like a bug.
+ */
+function staleNote() {
+  if (!state.editing) return "";
+  const stored = state.editing.record.preambleHash;
+  if (!stored || stored === label.hash(state.preamble)) return "";
+  return "Built with a different preamble — re-render to sync.";
+}
+
 const requestPreview = debounce(async () => {
   const spec = currentSpec();
   if (!spec.body.trim()) {
@@ -145,7 +171,7 @@ const requestPreview = debounce(async () => {
     el.insert.disabled = !result.ok || state.busy;
     if (result.ok) {
       // The webview's own status line already shows the box size and depth.
-      setStatus(state.contextNotes.join(" "));
+      setStatus([...state.contextNotes, staleNote()].filter(Boolean).join(" "));
     } else {
       setStatus(describeDiagnostics(result.diagnostics) || "Could not render.", "error");
     }
@@ -205,6 +231,12 @@ async function commit() {
     return;
   }
 
+  // A preamble that is still only the user's default becomes this document's
+  // now, so that the document that holds the equation also holds what built it.
+  // Its own undo step, deliberately: undoing the insert should not silently
+  // strip a document-wide setting.
+  if (state.preambleFromDefault) persistPreamble();
+
   setBusy(true, state.editing ? "Updating…" : "Inserting…");
   try {
     const result = await backend.render(spec, { pdf: true });
@@ -246,8 +278,6 @@ async function commit() {
 function setBusy(busy, message) {
   state.busy = busy;
   el.insert.disabled = busy || !state.lastMetrics;
-  el.rerenderAll.disabled = busy;
-  el.addFonts.disabled = busy;
   if (busy && message) setStatus(message, "busy");
 }
 
@@ -331,6 +361,14 @@ function syncEditingUI() {
 
 /* ---------------------------------------------------------------- preamble */
 
+/**
+ * Read the active document's preamble, seeding from the user's default when the
+ * document has never had one.
+ *
+ * The seed is in memory only. Writing it here would dirty every document merely
+ * by opening it, and `readDocumentPreamble` reports `present` precisely so that
+ * a preamble someone deliberately emptied is not re-seeded on every reload.
+ */
 function loadDocumentPreamble() {
   const doc = tryGet(() => app.activeDocument, null);
   if (!isUsable(doc)) {
@@ -340,54 +378,173 @@ function loadDocumentPreamble() {
   const id = tryGet(() => doc.id, null);
   if (id === state.preambleDoc) return;
   state.preambleDoc = id;
-  state.preamble = label.readDocumentPreamble(doc);
+
+  const stored = label.readDocumentPreamble(doc);
+  const fallback = prefs.read().defaultPreamble;
+  const before = state.preamble;
+  state.preambleFromDefault = !stored.present && !!fallback;
+  state.preamble = stored.present ? stored.text : (fallback || "");
   el.preamble.value = state.preamble;
+  syncPreambleUI();
+  // Switching documents can change what the same expression compiles to, and
+  // the selection watcher will not notice if the selection looks the same in
+  // both documents.
+  if (state.preamble !== before) requestPreview();
 }
 
-const savePreamble = debounce(() => {
+function syncPreambleUI() {
+  el.preambleDot.classList.toggle("hidden", !state.preamble.trim());
+  el.preambleHint.textContent = state.preambleFromDefault
+    ? "From your default — saved into this document when you insert an equation."
+    : "";
+}
+
+function persistPreamble() {
   const doc = tryGet(() => app.activeDocument, null);
   if (!isUsable(doc)) return;
   try {
     asOneUndo("Set Typst preamble", () => label.writeDocumentPreamble(doc, state.preamble));
+    state.preambleFromDefault = false;
+    syncPreambleUI();
   } catch (err) {
     setStatus(String((err && err.message) || err), "error");
   }
-}, 600);
+}
+
+const savePreamble = debounce(persistPreamble, 600);
 
 /* ------------------------------------------------------------------- fonts */
 
-function renderFontList(names) {
-  el.fontList.textContent = "";
-  if (!names.length) {
-    const li = document.createElement("li");
-    li.className = "empty";
-    li.textContent = "Typst defaults only";
-    el.fontList.appendChild(li);
-    return;
-  }
-  for (const name of names) {
-    const li = document.createElement("li");
-    li.textContent = name;
-    el.fontList.appendChild(li);
-  }
-}
-
 async function reloadFonts(announce) {
   const { fonts: data, names, dropped } = await fonts.load();
-  renderFontList(names);
   if (data.length || announce) {
     setBusy(true, "Loading fonts…");
     try {
       await backend.setFonts(data);
       const missing = dropped.length ? ` (${dropped.length} missing)` : "";
-      setStatus(data.length ? `${data.length} font file(s) loaded${missing}.` : "Typst defaults only.");
+      setStatus(data.length ? `${names.length} font file(s) loaded${missing}.` : "Typst defaults only.");
     } catch (err) {
       setStatus(String((err && err.message) || err), "error");
+      throw err;
     } finally {
       setBusy(false);
     }
   }
   requestPreview();
+}
+
+/* -------------------------------------------------------------------- tabs */
+
+/**
+ * The preamble is a tab rather than a drawer because it wants the live preview
+ * below it exactly as much as the equation does — and for the same reason it is
+ * not in the settings dialog, which would cover the preview entirely.
+ */
+function switchTab(name) {
+  state.tab = name;
+  const preamble = name === "preamble";
+  el.editor.classList.toggle("hidden", preamble);
+  el.preamblePane.classList.toggle("hidden", !preamble);
+  el.tabEquation.classList.toggle("active", !preamble);
+  el.tabPreamble.classList.toggle("active", preamble);
+  (preamble ? el.preamble : el.editor).focus();
+}
+
+/* ---------------------------------------------------------------- defaults */
+
+/** Put the user's remembered defaults into the toolbar. */
+function applyDefaults(stored) {
+  const wanted = (stored || prefs.read()).newEquation;
+  state.mode = wanted.mode;
+  state.sizeMode = wanted.sizeMode;
+  state.sizePt = wanted.sizePt;
+  state.colorMode = wanted.colorMode;
+  el.mode.value = state.mode;
+  el.sizeMode.value = state.sizeMode;
+  el.sizePt.value = state.sizePt;
+  el.sizePt.disabled = state.sizeMode !== "fixed";
+  el.colorMode.value = state.colorMode;
+}
+
+/* ------------------------------------------------------------ menu actions */
+
+/**
+ * Wait for the compiler if it is still starting, but do not hang on one that
+ * will never arrive — a command can be invoked with the panel never opened, and
+ * the compiler lives inside the panel's webview.
+ */
+async function ensureCompiler() {
+  if (backend.isReady()) return true;
+  const grace = new Promise((resolve) => setTimeout(() => resolve(false), COMPILER_GRACE_MS));
+  return Promise.race([backend.ready().then(() => true, () => false), grace]);
+}
+
+/**
+ * @param {{toDialog?: boolean}} options  Report into a dialog when there may be
+ *   no visible panel to report into, i.e. when invoked from a menu command.
+ */
+async function rerenderAllNow({ toDialog = false } = {}) {
+  const report = (text, kind) => (toDialog
+    ? dialogs.showMessage(text, "Re-render all")
+    : setStatus(text, kind, { sticky: true }));
+
+  if (!await ensureCompiler()) {
+    report("The Typst compiler runs inside the panel — open the Typst Math panel first.", "error");
+    return;
+  }
+
+  let doc;
+  try {
+    doc = activeDocument();
+  } catch (err) {
+    report(err.message, "error");
+    return;
+  }
+  setBusy(true, "Re-rendering…");
+  try {
+    const summary = await rerenderAll({
+      doc,
+      preamble: state.preamble,
+      engine: state.engine,
+      render: (spec, want) => backend.render(spec, want),
+      onProgress: (i, n) => setStatus(`Re-rendering ${i + 1} of ${n}…`, "busy"),
+    });
+    const failed = summary.failures.length
+      ? `, ${summary.failures.length} failed: ${summary.failures[0].message}`
+      : "";
+    const alignment = summary.worstResidual !== null && summary.worstResidual !== undefined
+      ? `, worst alignment ${summary.worstResidual.toFixed(2)} pt`
+      : "";
+    const blind = summary.unmeasured ? `, ${summary.unmeasured} unmeasured` : "";
+    report(summary.total
+      ? `Re-rendered ${summary.updated} of ${summary.total}${failed}${alignment}${blind}`
+      : "No Typst equations in this document.",
+      summary.failures.length ? "error" : "");
+  } catch (err) {
+    report(String((err && err.message) || err), "error");
+  } finally {
+    setBusy(false);
+  }
+}
+
+function aboutText() {
+  return [
+    state.engine || "compiler not started",
+    state.wasmSource ? `wasm via ${state.wasmSource}` : "",
+    `${fonts.names().length} extra font file(s)`,
+  ].filter(Boolean).join("\n");
+}
+
+/**
+ * Dispatch for the panel flyout menu and the command entrypoints, which share
+ * these actions. Deliberately static: InDesign does not reliably support
+ * mutating flyout items after registration.
+ */
+function invokeMenu(id) {
+  if (id === "settings") return dialogs.showSettings();
+  if (id === "rerender") return rerenderAllNow({ toDialog: true });
+  if (id === "about") return dialogs.showMessage(aboutText(), "About Typst Math");
+  return undefined;
 }
 
 /* -------------------------------------------------------------------- boot */
@@ -396,9 +553,12 @@ function bindElements() {
   for (const [key, id] of Object.entries({
     editor: "editor", preview: "preview", status: "status", insert: "insert",
     revert: "revert", mode: "mode", sizeMode: "size-mode", sizePt: "size-pt",
-    colorMode: "color-mode", settings: "settings", settingsToggle: "settings-toggle",
-    preamble: "preamble", fontList: "font-list", addFonts: "add-fonts",
-    clearFonts: "clear-fonts", rerenderAll: "rerender-all",
+    colorMode: "color-mode", settingsToggle: "settings-toggle",
+    tabEquation: "tab-equation", tabPreamble: "tab-preamble",
+    preambleDot: "preamble-dot", preamblePane: "preamble-pane",
+    preamble: "preamble", preambleHint: "preamble-hint",
+    preambleSaveDefault: "preamble-save-default",
+    preambleResetDefault: "preamble-reset-default",
   })) {
     el[key] = document.getElementById(id);
   }
@@ -439,61 +599,30 @@ function wireEvents() {
     setStatus("Reverted to the stored expression.");
   });
 
-  el.settingsToggle.addEventListener("click", () => {
-    el.settings.classList.toggle("hidden");
-  });
+  el.settingsToggle.addEventListener("click", () => dialogs.showSettings());
+
+  el.tabEquation.addEventListener("click", () => switchTab("equation"));
+  el.tabPreamble.addEventListener("click", () => switchTab("preamble"));
+
   el.preamble.addEventListener("input", () => {
     state.preamble = el.preamble.value;
+    // Editing it makes it this document's, whatever it started as.
+    state.preambleFromDefault = false;
+    syncPreambleUI();
     savePreamble();
     requestPreview();
   });
-
-  el.addFonts.addEventListener("click", async () => {
-    try {
-      const added = await fonts.pick();
-      if (added) await reloadFonts(true);
-    } catch (err) {
-      setStatus(String((err && err.message) || err), "error");
-    }
+  el.preambleSaveDefault.addEventListener("click", () => {
+    prefs.write({ defaultPreamble: state.preamble });
+    setStatus("Saved as your default preamble for new documents.");
   });
-  el.clearFonts.addEventListener("click", async () => {
-    fonts.clear();
-    await reloadFonts(true);
-  });
-
-  el.rerenderAll.addEventListener("click", async () => {
-    let doc;
-    try {
-      doc = activeDocument();
-    } catch (err) {
-      setStatus(err.message, "error");
-      return;
-    }
-    setBusy(true, "Re-rendering…");
-    try {
-      const summary = await rerenderAll({
-        doc,
-        preamble: state.preamble,
-        engine: state.engine,
-        render: (spec, want) => backend.render(spec, want),
-        onProgress: (i, n) => setStatus(`Re-rendering ${i + 1} of ${n}…`, "busy"),
-      });
-      const failed = summary.failures.length
-        ? `, ${summary.failures.length} failed: ${summary.failures[0].message}`
-        : "";
-      const alignment = summary.worstResidual !== null && summary.worstResidual !== undefined
-        ? `, worst alignment ${summary.worstResidual.toFixed(2)} pt`
-        : "";
-      const blind = summary.unmeasured ? `, ${summary.unmeasured} unmeasured` : "";
-      setStatus(summary.total
-        ? `Re-rendered ${summary.updated} of ${summary.total}${failed}${alignment}${blind}`
-        : "No Typst equations in this document.",
-        summary.failures.length ? "error" : "", { sticky: true });
-    } catch (err) {
-      setStatus(String((err && err.message) || err), "error");
-    } finally {
-      setBusy(false);
-    }
+  el.preambleResetDefault.addEventListener("click", () => {
+    state.preamble = prefs.read().defaultPreamble;
+    el.preamble.value = state.preamble;
+    state.preambleFromDefault = false;
+    syncPreambleUI();
+    savePreamble();
+    requestPreview();
   });
 }
 
@@ -519,15 +648,24 @@ function currentTheme() {
 
 async function start() {
   bindElements();
-  renderFontList(fonts.names());
   wireEvents();
+  applyDefaults();
   syncEditingUI();
+  dialogs.configure({
+    engine: () => (state.wasmSource ? `${state.engine} · wasm via ${state.wasmSource}` : state.engine),
+    reloadFonts: () => reloadFonts(true),
+    // A default only reaches the toolbar when nothing is being edited; changing
+    // it must not silently rewrite the equation the user has selected.
+    onDefaults: (stored) => { if (!state.editing) applyDefaults(stored); },
+    onError: (message) => setStatus(message, "error"),
+  });
   setStatus("Starting Typst compiler…", "busy");
 
   backend.attach(el.preview);
   try {
     const { engine, wasmSource } = await backend.ready();
     state.engine = engine;
+    state.wasmSource = wasmSource || "";
     backend.setTheme(currentTheme());
     // Which wasm-loading strategy won is worth seeing: it varies with how UXP
     // resolves plugin: URLs, and it is the first thing to check if startup
@@ -539,9 +677,11 @@ async function start() {
   }
 
   loadDocumentPreamble();
-  await reloadFonts(false);
+  // A font that has gone missing must not stop the panel from starting; the
+  // status line already says what happened.
+  try { await reloadFonts(false); } catch { /* reported by reloadFonts */ }
   watchSelection();
   onSelectionChanged();
 }
 
-module.exports = { start };
+module.exports = { start, invokeMenu };
