@@ -209,9 +209,19 @@ const requestPreview = debounce(async () => {
       // are the only things the reader did not ask for.
       setStatus([...state.contextNotes, staleNote()].filter(Boolean).join(" "));
     } else {
-      setStatus(describeDiagnostics(result.diagnostics) || "Could not render.", "error");
+      // The preview box has already painted these: the render that returned
+      // them drew them under the artwork that failed, since paint() runs before
+      // send() on the same object. Saying it again here stacked two copies of
+      // one compiler error, in two slightly different formats. The status line
+      // is cleared rather than left alone, so a note from the last render that
+      // worked does not sit there reading as a description of this failure.
+      const text = describeDiagnostics(result.diagnostics);
+      if (text) console.log(`[typst] ${text}`);
+      setStatus("");
     }
   } catch (err) {
+    // Not the same thing: here the webview never answered, so it has painted
+    // nothing and this is the only place the failure can appear.
     state.lastMetrics = null;
     el.insert.disabled = true;
     setStatus(String((err && err.message) || err), "error");

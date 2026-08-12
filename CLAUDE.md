@@ -138,6 +138,18 @@ is noise at best and alarming at worst. Both consoles carry a `[typst]` prefix.
 Panel status messages are `console.log`ged too, which survives the panel moving
 on.
 
+**A compile error belongs to the preview, not to the panel.** In
+`webview/main.js` the render case calls `paint()` before `send()`, on the same
+object, so every failure the panel hears about has already been drawn under the
+artwork that failed. Reporting it again stacked two copies of one Typst error
+in two formats — and in one case two *different* wrong ones, since the panel
+filters `info` diagnostics out and then falls through to "Could not render."
+while the preview said "Nothing to render." The panel now logs them and stays
+quiet. It still reports a compile failure for the actions it owns
+(Insert/Update, re-render all), where the message answers a button press, and
+for the `catch` around the render call, which is a bridge failure: there the
+webview never replied and has painted nothing.
+
 **An operation that succeeded says nothing.** The equation appearing in the
 document is the feedback, and a panel that announces every success trains
 people to ignore the line the failures also arrive on. So the status line
