@@ -4,10 +4,23 @@
 :root {
   --gap: 6px;
   --pad: 8px;
-  --border: rgba(128, 128, 128, .3);
+  --border: rgba(128, 128, 128, .45);
   --muted: #8a8a8a;
   --error: #d7373f;
   --accent: #2680eb;
+}
+
+/* One muted grey cannot serve both themes: #8a8a8a on InDesign's dark chrome
+   left the field labels and the inactive tab barely legible. The panel already
+   reads uxp.host.theme for the webview, so it stamps the same answer here. */
+body.theme-dark {
+  --muted: #b6b6b6;
+  --border: rgba(190, 190, 190, .35);
+}
+
+body.theme-light {
+  --muted: #5c5c5c;
+  --border: rgba(90, 90, 90, .35);
 }
 
 * {
@@ -132,8 +145,19 @@ select {
   margin-top: var(--gap);
 }
 
-/* No line-height: UXP positions the caret from it and gets it wrong, which
-   presents as a textarea you can type into with no visible cursor. */
+/* caret-color, because it defaults to currentColor and nothing sets `color`
+   here: the textarea inherits UXP's panel text colour, which on the dark theme
+   is nearly white, while the control paints its own background white as soon as
+   it takes focus. The caret was being drawn white on white. The text is
+   unaffected — the native control colours that itself, which is why the box
+   looked perfectly normal apart from having no cursor.
+
+   No line-height either: UXP positions the caret from it and gets it wrong. */
+#editor,
+#dlg-default-preamble {
+  caret-color: #1a1a1a;
+}
+
 #editor {
   flex: 0 0 auto;
   height: 84px;
@@ -206,12 +230,19 @@ dialog {
   padding: var(--pad);
   border: 1px solid var(--border);
   border-radius: 4px;
+  /* Taller content scrolls rather than being cut off by whatever height the
+     host gives the dialog. */
+  overflow: auto;
 }
 
+/* Without an explicit width this shrink-wraps its content and simply ignores
+   the dialog growing around it, which reads as a window that resizes while
+   nothing inside it moves. */
 .dlg {
   display: flex;
   flex-direction: column;
-  min-width: 280px;
+  width: 100%;
+  min-width: 260px;
 }
 
 /* Vertical rhythm from margins, not `gap`: a flex row with `gap` ran the label
@@ -246,7 +277,11 @@ dialog {
   margin-bottom: var(--gap);
 }
 
+/* Explicit width: it sits inside a plain block rather than directly in the
+   flex column, so it would otherwise size itself from the textarea `cols`
+   default and stay narrow however wide the dialog gets. */
 #dlg-default-preamble {
+  width: 100%;
   height: 72px;
   resize: none;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;

@@ -680,6 +680,9 @@ function currentTheme() {
 
 async function start() {
   bindElements();
+  // Before anything is drawn: this picks the muted greys, and the panel is
+  // unreadable against the wrong chrome.
+  document.body.classList.add(`theme-${currentTheme()}`);
   wireEvents();
   applyDefaults();
   syncEditingUI();

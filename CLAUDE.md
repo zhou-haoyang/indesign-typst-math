@@ -297,13 +297,22 @@ application. The InDesign ones are demonstrated by
   *stroke-inclusive* bottom edge to the baseline, so any weight shifts an
   equation by half of it — even with colour None, when nothing is visible.
 - **UXP's CSS and native controls are not Chromium's, in ways that bite the
-  panel.** Three met so far: `gap` on a flex row silently does nothing in some
+  panel.** Four met so far: `gap` on a flex row silently does nothing in some
   contexts (a label and its hint rendered as "FontsAdded to the compiler…"), so
   vertical rhythm in the dialog comes from margins; a `<button>` is drawn as a
   native pill that ignores `background`/`border`, so the tab strip is built from
-  `<span>`s; and a `<textarea>` that spends its life inside a `display: none`
+  `<span>`s; a `<textarea>` that spends its life inside a `display: none`
   subtree never becomes editable, which is why the two editor tabs share one
-  textarea and swap its contents rather than hiding one.
+  textarea and swap its contents rather than hiding one; and a `<textarea>`
+  colours its own text natively but takes the **caret** from CSS
+  `currentColor`, so on the dark theme it drew a near-white caret on the white
+  background the control paints when focused. `caret-color` has to be set
+  explicitly. A control that looks entirely normal but has no visible cursor is
+  this.
+- **One muted grey does not serve both themes.** Nothing here reacts to
+  `prefers-color-scheme`; the panel reads `uxp.host.theme` and stamps
+  `theme-dark`/`theme-light` on `<body>`, and the greys hang off that. Anything
+  added to `:root` alone will be unreadable in one theme or the other.
 - **A flyout `menuItems` entry without an `id` takes the commands down with it.**
   Every item needs one, *including a separator* — `{label: "-"}` is rejected with
   "'id' should be defined in menuItem object". Because `entrypoints.setup` may

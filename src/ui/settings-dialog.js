@@ -24,7 +24,9 @@ let deps = null;
 function bind() {
   if (el.bound) return;
   for (const [key, id] of Object.entries({
-    dialog: "settings-dialog", fontList: "dlg-font-list", addFonts: "dlg-add-fonts",
+    // The id carries the remembered geometry: UXP stores a dialog's size
+    // against it, so a size change here does nothing until the id changes too.
+    dialog: "settings-dialog-2", fontList: "dlg-font-list", addFonts: "dlg-add-fonts",
     clearFonts: "dlg-clear-fonts", defaultPreamble: "dlg-default-preamble",
     mode: "dlg-mode", sizeMode: "dlg-size-mode", sizePt: "dlg-size-pt",
     colorMode: "dlg-color-mode", engine: "dlg-engine", status: "dlg-status",
@@ -160,9 +162,9 @@ async function showSettings() {
   try {
     await open(el.dialog, {
       title: "Typst Math Settings",
-      resize: "vertical",
-      size: { width: 420, height: 520 },
-      minSize: { width: 320, height: 360 },
+      resize: "both",
+      size: { width: 400, height: 480 },
+      minSize: { width: 300, height: 320 },
     });
   } catch (err) {
     // Losing the dialog means losing the only way to add a font, so this has to

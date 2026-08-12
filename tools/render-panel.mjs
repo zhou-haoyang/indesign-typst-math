@@ -54,11 +54,14 @@ function page(variant) {
      not the layout viewport, so without it the page lays out wide and the
      screenshot merely *crops*, which reads as right-aligned controls having
      vanished. */
-  body { background: #3d3d3d; color: #f0f0f0; width: ${WIDTH}px; margin: 0; }
+  /* The near-white text colour is not decoration: it is what the panel
+     inherits from UXP on the dark theme, and it is why the caret needed
+     pinning down. */
+  body { background: #4a4a4a; color: #f0f0f0; width: ${WIDTH}px; margin: 0; }
   webview { background: #fff; display: block; }
   textarea, select, input, button { font-size: 11px; }
   ${variant === "dialog" ? "dialog { display: block; position: static; }" : ""}
-</style></head><body>
+</style></head><body class="theme-dark">
 <script>
   window.__variant = ${JSON.stringify(variant)};
   window.__preamble = ${preamble};
@@ -73,8 +76,9 @@ async function build(variant) {
 
   let content = body;
   if (variant === "dialog") {
-    // Only the dialog, opened.
-    const start = content.indexOf('<dialog id="settings-dialog">');
+    // The first <dialog>, whichever id it currently carries — the id changes
+    // whenever the dialog is resized, since UXP remembers geometry against it.
+    const start = content.indexOf("<dialog");
     const end = content.indexOf("</dialog>", start) + "</dialog>".length;
     content = content.slice(start, end);
   } else {
