@@ -122,16 +122,22 @@ a shot looks wrong, measure the geometry (`getBoundingClientRect` through
 ### When the panel itself misbehaves
 
 The webview has its own console, separate from the panel's, so a broken bridge
-looks like silence on both sides. Two readouts exist for that and are worth
-extending rather than deleting:
+looks like silence on both sides. The readouts for that are worth extending
+rather than deleting, but they belong in the **console**, not on screen — a
+status line is read by whoever is using the plugin, and a line of counters there
+is noise at best and alarming at worst. Both consoles carry a `[typst]` prefix.
 
-- the webview's status line doubles as a bridge readout
-  (`bridge: uxpHost present · in 148 · out uxpHost`) until the panel acks;
-- the panel reports the frame's actual read-back state when placement
-  formatting fails, and the applied Y offset with its residual on every insert.
+- the webview logs the bridge state on every announcement
+  (`[typst] bridge: uxpHost present · in 148 · out uxpHost`), and puts it on
+  screen only once the panel has failed to answer four announcements — by then
+  it is a fault rather than a slow start;
+- the panel logs the frame's actual read-back state when placement formatting
+  fails, the applied Y offset with its residual on every insert, the worst
+  residual across a re-render pass, and which wasm strategy won at startup.
 
-Panel status messages are also `console.log`ged with a `[typst]` prefix, which
-survives the panel moving on.
+Panel status messages are `console.log`ged too, which survives the panel moving
+on. What reaches the status line itself is what the user can act on: an error,
+a note about the context, or one word confirming the placement.
 
 ## Architecture
 
@@ -236,10 +242,11 @@ Applying that depth is its own problem, solved by measurement in
   reference — which is why misalignment appeared on first rows only.
 
 So it reads the real baseline (`frame.storyOffset.baseline`) alongside the
-bounds, probes both signs, and solves from the measured slope. The panel reports
-the applied offset and the residual (`Y offset +2.46, off by 0.00 pt`), and the
-re-render pass reports the worst residual across the document. A non-zero
-residual is the signal to look here.
+bounds, probes both signs, and solves from the measured slope. Every insert logs
+the applied offset and the residual (`[typst] inserted inline, depth 4.57 pt, Y
+offset +4.57, off by 0.00 (baseline: anchor)`), and a re-render pass logs the
+worst residual across the document. A non-zero residual is the signal to look
+here.
 
 ### What InDesign will not do
 
@@ -269,7 +276,8 @@ application. The InDesign ones are demonstrated by
 - **`plugin:/` resolves to a `file://` origin**, where Chromium blocks `fetch`
   and `XHR` ("HTTP 0"). ES module imports still work, so `scripts/vendor.mjs`
   also emits each wasm as a base64 ES module as a fallback. `compile.js` tries
-  strategies in order and reports which won in the panel status line.
+  strategies in order; which won is logged to both consoles and shown in
+  Settings and About.
 - **Pass wasm as a `BufferSource`, never a `Response`** — a Response routes into
   `instantiateStreaming`, and wasm-bindgen's MIME fallback is gated on a response
   `type` that `plugin:` does not produce.

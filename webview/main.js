@@ -24,12 +24,17 @@ let lastResult = null;
 
 /* The panel and this page can only talk over the UXP message bridge, and when
    that bridge is misconfigured both sides just go quiet — the webview's console
-   is separate, so nothing surfaces. This page's status line is visible in the
-   panel, so it doubles as the bridge's diagnostic readout until the panel
-   acknowledges a round trip. */
+   is separate, so nothing surfaces. So the bridge's state is logged on every
+   announcement, and reaches the status line only once the panel has stayed
+   silent long enough for that to be a fault rather than a slow start: this page
+   is the panel's preview area, and a healthy startup should not flash a line of
+   counters at whoever opens it. */
 let messagesIn = 0;
 let sendChannel = "none";
 let acknowledged = false;
+/** Announcements that may go unanswered before the readout goes on screen. */
+const BRIDGE_PATIENCE = 4;
+let unanswered = 0;
 
 function bridgeReadout() {
   return `bridge: uxpHost ${window.uxpHost ? "present" : "MISSING"}` +
@@ -71,7 +76,7 @@ window.addEventListener("message", (event) => {
     msg = typeof msg.data === "string" ? safeParse(msg.data) : msg.data;
   }
   if (!msg || typeof msg !== "object") return;
-  if (!acknowledged) refreshStatus();
+  if (!acknowledged) refreshStatus(false);
   handle(msg);
 });
 
@@ -84,11 +89,21 @@ let readyMessage = null;
 /** Engine string shown once the bridge is confirmed working. */
 let engineLabel = "";
 
-/** While unacknowledged, keep the bridge state on screen. */
-function refreshStatus() {
+/**
+ * While unacknowledged, keep the bridge state in view — the console first.
+ *
+ * @param {boolean} log Only the announcement loop logs. The panel pings several
+ *   times a second while the compiler is still building, and one line per ping
+ *   buries everything else in the console.
+ */
+function refreshStatus(log) {
   if (acknowledged) return;
-  statusEl.className = window.uxpHost ? "" : "error";
-  statusEl.textContent = `${engineLabel}\n${bridgeReadout()}`.trim();
+  if (log) console.log(`[typst] ${bridgeReadout()}`);
+  const stalled = unanswered >= BRIDGE_PATIENCE;
+  statusEl.className = stalled ? "error" : "";
+  statusEl.textContent = stalled
+    ? `${engineLabel}\nThe panel is not answering — ${bridgeReadout()}`.trim()
+    : engineLabel;
 }
 
 async function handle(msg) {
@@ -184,8 +199,9 @@ function paint(res, spec) {
 
   const m = res.metrics;
   statusEl.className = "";
-  statusEl.textContent =
-    `${m.width.toFixed(2)} × ${m.height.toFixed(2)} pt   depth ${m.depth.toFixed(2)} pt`;
+  // Size only: depth is what the placement turns on, but as a number on screen
+  // it explains nothing the dashed baseline guide does not already show.
+  statusEl.textContent = `${m.width.toFixed(2)} × ${m.height.toFixed(2)} pt`;
 }
 
 function showDiagnostics(diagnostics) {
@@ -219,7 +235,10 @@ window.addEventListener("resize", () => {
   try {
     await init();
     stage.innerHTML = '<span class="placeholder">Type an expression…</span>';
-    engineLabel = `${engine} · wasm via ${wasmSource()}`;
+    engineLabel = engine;
+    // Which loading strategy won is worth having when startup breaks, and is
+    // noise on screen; it also reaches the panel, for About and Settings.
+    console.log(`[typst] ${engine} · wasm via ${wasmSource()}`);
     readyMessage = { type: "ready", engine, wasmSource: wasmSource() };
   } catch (err) {
     stage.innerHTML = '<span class="placeholder">Compiler failed to start</span>';
@@ -227,14 +246,15 @@ window.addEventListener("resize", () => {
     readyMessage = { type: "ready", engine, error: String((err && err.message) || err) };
   }
   send(readyMessage);
-  refreshStatus();
+  refreshStatus(true);
   // Keep announcing until the panel confirms it heard us: the panel may attach
   // its listener after this point, and a message sent into a dead bridge is
   // dropped without error.
   const retry = setInterval(() => {
     if (acknowledged) return clearInterval(retry);
+    unanswered++;
     send(readyMessage);
-    refreshStatus();
+    refreshStatus(true);
   }, 1000);
   setTimeout(() => clearInterval(retry), 30000);
 })();

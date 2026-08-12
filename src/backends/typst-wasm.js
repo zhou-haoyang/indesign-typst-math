@@ -25,10 +25,14 @@ const UNREADABLE_LIMIT = 12;
 function diagnoseStall() {
   if (loadError) return `the preview failed to load: ${loadError}`;
   if (messagesIn > 0) {
+    // The shape of what did arrive is what fixes this, and is a dump of an
+    // object in a status line, so it goes to the console.
+    console.log(`[typst] unreadable message from the preview: ${unreadableSample || "unknown"}`);
     return "the preview is sending messages the panel cannot read " +
-      `(${messagesIn} received). Shape: ${unreadableSample || "unknown"}`;
+      `(${messagesIn} received).`;
   }
-  // The preview draws its own bridge readout, which is visible in the panel.
+  // The preview puts its own bridge readout on screen once the panel has stayed
+  // silent for a few seconds, which by here it has.
   return "no messages from the preview. If it shows \"uxpHost MISSING\", the " +
     "message bridge is off: check requiredPermissions.webview.enableMessageBridge " +
     "in manifest.json and re-add the plugin in UXP Developer Tools.";

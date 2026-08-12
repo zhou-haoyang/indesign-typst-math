@@ -205,7 +205,8 @@ const requestPreview = debounce(async () => {
     state.lastMetrics = result.ok ? result.metrics : null;
     el.insert.disabled = !result.ok || state.busy;
     if (result.ok) {
-      // The webview's own status line already shows the box size and depth.
+      // Nothing routine to say: the webview shows the box size, and the notes
+      // are the only things the reader did not ask for.
       setStatus([...state.contextNotes, staleNote()].filter(Boolean).join(" "));
     } else {
       setStatus(describeDiagnostics(result.diagnostics) || "Could not render.", "error");
@@ -227,12 +228,14 @@ const requestPreview = debounce(async () => {
 function withWarnings(message) {
   const warnings = lastPlacementWarnings();
   if (!warnings.length) return message;
-  // Only when something actually refused: the read-back names which object is
-  // still carrying formatting, which is otherwise indistinguishable from the
-  // outside — the frame, the graphic inside it and the applied style can each
-  // draw a box.
-  return [message, `Could not clear: ${warnings.join("; ")}`, lastFrameChrome()]
-    .filter(Boolean).join("\n");
+  // Which object refused what, and what the frame reads back as, is what fixes
+  // this — the frame, the graphic inside it and the applied style can each draw
+  // a box — and it is a wall of property names to anyone else. So the panel says
+  // that it happened and the console says what happened.
+  console.log(`[typst] could not clear: ${warnings.join("; ")}`);
+  console.log(`[typst] frame reads back as: ${lastFrameChrome()}`);
+  return `${message}\nSome of the frame's formatting could not be cleared, ` +
+    "so it may show a box or sit slightly off the baseline.";
 }
 
 function buildRecord(spec, metrics) {
@@ -296,10 +299,19 @@ async function commit() {
       });
       state.editing = { frame, record, id: tryGet(() => frame.id, null) };
       lastSignature = selectionSignature();
+      // The depth, the offset that was applied and what it was solved against
+      // are how an alignment bug is diagnosed and are meaningless to read
+      // otherwise, so they go to the console. A display equation has no offset
+      // to report: it is anchored above the line, not on the baseline.
+      const how = !anchored
+        ? `on the page, not anchored: ${target.why || "unknown"}`
+        : spec.mode === "display"
+          ? "above the line"
+          : `inline, depth ${result.metrics.depth.toFixed(2)} pt, Y offset ${lastOffset()}`;
+      console.log(`[typst] inserted ${how}`);
       setStatus(withWarnings(anchored
-        ? `Inserted inline\ndepth ${result.metrics.depth.toFixed(2)} pt` +
-          `\nY offset ${lastOffset()}`
-        : `Inserted on the page — not anchored\nbecause: ${target.why || "unknown"}`),
+        ? "Inserted."
+        : "Inserted on the page. To place one inline, put the text cursor in the text first."),
         "", { sticky: true });
       syncEditingUI();
     }
@@ -570,12 +582,17 @@ async function rerenderAllNow({ toDialog = false } = {}) {
     const failed = summary.failures.length
       ? `, ${summary.failures.length} failed: ${summary.failures[0].message}`
       : "";
+    // A batch is exactly where an alignment regression would hide, so the worst
+    // residual is still measured and still reported — to the console, where a
+    // number in points is worth something.
     const alignment = summary.worstResidual !== null && summary.worstResidual !== undefined
       ? `, worst alignment ${summary.worstResidual.toFixed(2)} pt`
       : "";
     const blind = summary.unmeasured ? `, ${summary.unmeasured} unmeasured` : "";
+    console.log(`[typst] re-rendered ${summary.updated} of ${summary.total}` +
+      `${failed}${alignment}${blind}`);
     report(summary.total
-      ? `Re-rendered ${summary.updated} of ${summary.total}${failed}${alignment}${blind}`
+      ? `Re-rendered ${summary.updated} of ${summary.total}${failed}`
       : "No Typst equations in this document.",
       summary.failures.length ? "error" : "");
   } catch (err) {
@@ -792,10 +809,13 @@ async function start() {
     // The same answer the panel styled itself with — the preview rendering
     // light against a dark panel was the visible half of this being wrong.
     backend.setTheme(theme);
-    // Which wasm-loading strategy won is worth seeing: it varies with how UXP
+    // Which wasm-loading strategy won is worth seeing — it varies with how UXP
     // resolves plugin: URLs, and it is the first thing to check if startup
-    // breaks after a UXP update.
-    setStatus(wasmSource ? `${engine} · wasm via ${wasmSource}` : engine);
+    // breaks after a UXP update — but it is jargon in a status line, and the
+    // panel has nothing else to announce: the preview says "Type an
+    // expression…" for itself. Settings and About carry the engine string.
+    console.log(`[typst] ${engine}${wasmSource ? ` · wasm via ${wasmSource}` : ""}`);
+    setStatus("");
   } catch (err) {
     setStatus(`Compiler failed to start: ${(err && err.message) || err}`, "error");
     return;

@@ -178,8 +178,9 @@ demands `application/wasm`; wasm-bindgen's fallback for that is gated on the
 response `type` being `basic`/`cors`/`default`, which a non-http response is
 not, so it rethrows instead of recovering.
 
-The panel's status line reports which strategy won (`wasm via module`, etc.) —
-the first thing to check if startup breaks after a UXP update.
+Which strategy won (`wasm via module`, etc.) is logged at startup and shown in
+Settings and About — the first thing to check if startup breaks after a UXP
+update.
 
 ### The message bridge
 
@@ -189,16 +190,17 @@ perfectly healthy. `src/backends/message.js` therefore *searches* for our
 payload — parsing strings and descending through the usual envelope keys —
 instead of assuming a shape. `tools/test-messages.mjs` pins that down.
 
-Because both sides can go silent without an error anywhere, the webview's status
-line doubles as a bridge readout until the panel acknowledges a round trip:
+Because both sides can go silent without an error anywhere, the webview logs a
+bridge readout with each announcement until the panel acknowledges a round trip:
 
 ```
-bridge: uxpHost present · in 148 · out uxpHost
+[typst] bridge: uxpHost present · in 148 · out uxpHost
 ```
 
 `uxpHost MISSING` means the bridge is off (manifest); `in 0` means panel→webview
 is not arriving; both healthy while the panel still complains means the payload
-shape changed again. The readout disappears once a round trip completes.
+shape changed again. It stays in the console during a normal start, and goes on
+screen only if four announcements go unanswered.
 
 ### Updating Typst
 
