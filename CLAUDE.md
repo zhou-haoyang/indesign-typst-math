@@ -304,22 +304,29 @@ application. The InDesign ones are demonstrated by
   `<span>`s; a `<textarea>` that spends its life inside a `display: none`
   subtree never becomes editable, which is why the two editor tabs share one
   textarea and swap its contents rather than hiding one.
-- **The editor caret, still open, and the most expensive thing here so far.** A
-  `<textarea>` set in `ui-monospace, SFMono-Regular, Menlo, monospace` accepts
-  typing, renders correctly and **draws no caret**. Removing its `line-height`
-  did nothing; setting `caret-color` explicitly did nothing; both were guesses
-  and both were wrong. Swapping to `sp-textarea` did bring the caret back, but
-  that component renders into a **closed** shadow root (`element.shadowRoot` is
-  `null`), so no monospace face reaches it by host inheritance, by `::part`, or
-  by injection — measured, not assumed. The current attempt is a `<textarea>`
-  named in fonts that certainly exist (`Menlo, Monaco, Consolas, monospace`),
-  on the theory that UXP mis-computes caret metrics from a leading entry it
-  cannot resolve. **If that fails, the element is the cause and the choice is a
-  real one — caret or monospace — so ask rather than pick.** The panel logs
-  `[typst] editor font: …` with the resolved family.
+- **UXP's CSS parser silently drops what it does not implement**, and the editor
+  caret cost four rounds to that. `caret-color` is not implemented — it is
+  discarded, exactly as the `monospace` generic is discarded from a font stack
+  (the panel logs the resolved family: ask for `Menlo, Monaco, Consolas,
+  monospace` and it reports `Menlo,Monaco,Consolas`). A declaration having no
+  effect here does not mean the value was wrong; check whether the *property*
+  survives at all before theorising about the value.
+  Two separate faults produced one symptom. Set in
+  `ui-monospace, SFMono-Regular, …` the editor drew **no caret at all**: those
+  are Chromium/Apple keywords, and the host appears to compute caret metrics
+  from a leading entry it cannot resolve while still painting text through the
+  fallback. Name faces that exist. With that fixed the caret appeared but was
+  **white on white** — it takes the panel theme's text colour, and the control
+  paints itself a white background on focus. Since it cannot be coloured
+  directly, `panel.css` pins the editor's own background and text per theme,
+  which holds whether the caret follows the element's `color` or the theme.
+  Ruled out along the way, so as not to be re-run: its `line-height` is
+  irrelevant, and `sp-textarea` does draw a caret but renders into a **closed**
+  shadow root (`element.shadowRoot` is `null`), so no monospace face reaches it
+  by host inheritance, by `::part`, or by injection.
   Read and write the widget through the three helpers at the top of
-  `src/ui/panel.js`, never `.value` directly; that is what has kept each of
-  these swaps to two files.
+  `src/ui/panel.js`, never `.value` directly; that is what kept each of these
+  swaps to two files.
 - **One muted grey does not serve both themes.** Nothing here reacts to
   `prefers-color-scheme`; the panel reads `uxp.host.theme` and stamps
   `theme-dark`/`theme-light` on `<body>`, and the greys hang off that. Anything

@@ -145,28 +145,39 @@ select {
   margin-top: var(--gap);
 }
 
-/* The font stack here is load-bearing, and not for looks.
+/* Two things here are load-bearing, and neither is for looks.
 
-   A <textarea> in this host drew no caret while it was set in
-   `ui-monospace, SFMono-Regular, Menlo, monospace`. Swapping the element for
-   an sp-textarea brought the caret back — but that component renders into a
-   *closed* shadow root, so no monospace face can reach it, by host
-   inheritance, by ::part, or by injection. Neither trade is acceptable, and
-   the two reports differ in two variables at once: the element *and* the font.
+   The font stack names faces that exist on the machine. Set in
+   `ui-monospace, SFMono-Regular, …` the editor drew no caret at all: those are
+   Chromium/Apple keywords, and this host appears to compute caret metrics from
+   a leading entry it cannot resolve while still painting text through the
+   fallback. It reports `Menlo,Monaco,Consolas` for the stack below — note that
+   it dropped the `monospace` generic, which is the same parser behaviour that
+   makes the colours below necessary.
 
-   `ui-monospace` and `SFMono-Regular` are Chromium/Apple-specific keywords. If
-   UXP cannot resolve the leading entries it may still paint text through a
-   fallback while computing caret metrics from the font it failed to find,
-   which would explain a textarea that types correctly with no visible cursor.
-   So this names fonts that exist on the machine, with the generic last.
+   Because it also drops `caret-color`. The caret exists, and takes the panel
+   theme's text colour — white on the dark theme — which the control then draws
+   onto the white background it paints for itself on focus. Invisible, and not
+   directly fixable.
 
-   If the caret is still missing, the element is the cause rather than the
-   font, and the honest choice is sp-textarea with a proportional face. The
-   panel logs what this actually resolved to. */
+   So the editor's own colours are pinned per theme instead. That keeps the
+   caret in contrast whether it follows the element's `color` or the panel
+   theme, which is the point: it does not depend on knowing which. */
 #editor,
 #dlg-default-preamble {
   font-family: Menlo, Monaco, Consolas, monospace;
-  caret-color: #1a1a1a;
+}
+
+.theme-dark #editor,
+.theme-dark #dlg-default-preamble {
+  background-color: #2b2b2b !important;
+  color: #f0f0f0 !important;
+}
+
+.theme-light #editor,
+.theme-light #dlg-default-preamble {
+  background-color: #ffffff !important;
+  color: #1a1a1a !important;
 }
 
 #editor {
