@@ -94,9 +94,9 @@ function setStatus(text, kind, options = {}) {
 
 /**
  * Everything that touches the editor widget goes through these three, so that
- * swapping it costs them plus the one tag in index.html. It has been a
- * `<textarea>` and an `sp-textarea` and is currently the former; see panel.css
- * for what the caret turns on.
+ * swapping it costs them plus the one tag in index.html. It is an
+ * `sp-textarea`: the native Spectrum widget themes itself and draws its own
+ * caret, at the price of being unstyleable inside. See panel.css.
  *
  * `placeholder` is set as an attribute rather than a property, because a custom
  * element's property does not necessarily reflect back to one.
@@ -739,14 +739,11 @@ async function start() {
   // unreadable against the wrong chrome.
   const theme = currentTheme();
   document.body.classList.add(`theme-${theme}`);
-  // Both readouts exist because both have been wrong while looking fine. The
-  // font stack because this host drops entries it cannot resolve, and the theme
-  // because getting it wrong is nearly silent — it shows up as a panel that is
-  // merely hard to read rather than as an error.
+  // Worth a line because getting it wrong is nearly silent: it shows up as a
+  // panel that is merely hard to read rather than as an error, and it drove the
+  // preview and the panel's own greys apart for a long time without complaint.
   console.log(`[typst] theme: "${hostTheme()}" → ${theme}` +
-    ` · painted ${tryGet(() => getComputedStyle(document.body).backgroundColor, "?")}` +
-    `\n[typst] editor: font ${tryGet(() => getComputedStyle(el.editor).fontFamily, "?")}` +
-    ` · background ${tryGet(() => getComputedStyle(el.editor).backgroundColor, "?")}`);
+    ` · painted ${tryGet(() => getComputedStyle(document.body).backgroundColor, "?")}`);
   wireEvents();
   applyDefaults();
   syncEditingUI();

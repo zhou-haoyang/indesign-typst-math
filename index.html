@@ -55,14 +55,13 @@
          textarea that spends its life inside a hidden subtree never becomes
          editable. One always-visible control cannot hit that.
 
-         Back to <textarea> after a spell as sp-textarea. sp-textarea did draw
-         a caret, but its control sits in a *closed* shadow root, so no monospace
-         face can reach it by any route — and Typst source in a proportional
-         font is the worse of the two losses. See panel.css for what the caret
-         appears to actually depend on. Reading and writing goes through the
-         helpers in panel.js so that swapping the widget is one change. -->
-    <textarea id="editor" spellcheck="false" autocomplete="off"
-      placeholder="Typst math, e.g.  sum_(i=1)^n x_i / 2"></textarea>
+         sp-textarea, the native Spectrum widget, chosen over a plain <textarea>
+         so the control themes itself and draws its own caret. The cost is that
+         it renders into a *closed* shadow root, so nothing inside it can be
+         styled — a monospace face for the Typst source is not available at any
+         price. Reading and writing goes through the helpers in panel.js so that
+         swapping the widget is one change. -->
+    <sp-textarea id="editor" placeholder="Typst math, e.g.  sum_(i=1)^n x_i / 2"></sp-textarea>
 
     <div id="preamble-actions" class="row hidden">
       <button id="preamble-save-default" title="Use this preamble for new documents">Save as default</button>
@@ -111,8 +110,8 @@
       <div class="section">
         <span class="section-title">Default preamble</span>
         <span class="hint">Seeds any document that has none.</span>
-        <textarea id="dlg-default-preamble" spellcheck="false" autocomplete="off"
-          placeholder="#let vb(x) = math.bold(x)"></textarea>
+        <sp-textarea id="dlg-default-preamble"
+          placeholder="#let vb(x) = math.bold(x)"></sp-textarea>
       </div>
 
       <div class="section">

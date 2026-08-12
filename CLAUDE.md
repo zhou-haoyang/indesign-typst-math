@@ -304,39 +304,35 @@ application. The InDesign ones are demonstrated by
   `<span>`s; a `<textarea>` that spends its life inside a `display: none`
   subtree never becomes editable, which is why the two editor tabs share one
   textarea and swap its contents rather than hiding one.
-- **UXP's CSS parser silently drops what it does not implement**, and the editor
-  caret cost four rounds to that. `caret-color` is not implemented — it is
-  discarded, exactly as the `monospace` generic is discarded from a font stack
-  (the panel logs the resolved family: ask for `Menlo, Monaco, Consolas,
-  monospace` and it reports `Menlo,Monaco,Consolas`). A declaration having no
-  effect here does not mean the value was wrong; check whether the *property*
-  survives at all before theorising about the value.
-  Two separate faults produced one symptom. Set in
-  `ui-monospace, SFMono-Regular, …` the editor drew **no caret at all**: those
-  are Chromium/Apple keywords, and the host appears to compute caret metrics
-  from a leading entry it cannot resolve while still painting text through the
-  fallback. Name faces that exist. With that fixed the caret appeared but was
-  **white on white** — it takes the panel theme's text colour, and the control
-  paints itself a white background on focus. Since it cannot be coloured
-  directly, `panel.css` pins the editor's own background and text per theme,
-  which holds whether the caret follows the element's `color` or the theme.
-  Ruled out along the way, so as not to be re-run: its `line-height` is
-  irrelevant, and `sp-textarea` does draw a caret but renders into a **closed**
-  shadow root (`element.shadowRoot` is `null`), so no monospace face reaches it
-  by host inheritance, by `::part`, or by injection.
+- **Prefer the native Spectrum widget, and accept that it is a sealed box.** The
+  editors are `sp-textarea`, per Adobe's documented order (Spectrum Web
+  Components, then `sp-*` widgets, then plain HTML) and by the maintainer's
+  preference. It themes itself and draws its own caret. It also renders into a
+  **closed** shadow root — `element.shadowRoot` is `null` — so its font,
+  colours, caret and padding cannot be touched from outside, by host
+  inheritance, by `::part`, or by injection. All three were measured, not
+  assumed. **A monospace face for the Typst source is therefore not available,
+  and that was decided knowingly**; do not add `font-family` or colour rules for
+  these elements expecting them to land. Set the box and nothing else, because a
+  custom element has no useful intrinsic size. SWC proper is not reachable here
+  regardless: `document.createElement` does not work for it and it needs a build
+  step this project deliberately does not have.
   Read and write the widget through the three helpers at the top of
-  `src/ui/panel.js`, never `.value` directly; that is what kept each of these
-  swaps to two files.
-  **On why this is a plain `<textarea>` when Adobe recommends otherwise.** The
-  documented order of preference is Spectrum Web Components, then `sp-*`
-  widgets, then plain HTML — and for multiline that means `sp-textarea` or
-  `sp-textfield[multiline]`. That guidance optimises for Spectrum-consistent
-  chrome; this control is a code editor, and the closed shadow root above makes
-  a monospace face impossible, which is exactly the case the third tier exists
-  for. SWC is not available here in any event: `document.createElement` does not
-  work for it, and it needs a build step this project deliberately does not
-  have. `sp-textfield[multiline]` is the one option never tried; expect the same
-  closed root, but that is a guess and this control has punished several.
+  `src/ui/panel.js`, never `.value` directly; that is what has kept each swap of
+  this control to two files.
+- **UXP's CSS parser silently drops what it does not implement.** `caret-color`
+  is discarded, exactly as the `monospace` generic is discarded from a font
+  stack — ask for `Menlo, Monaco, Consolas, monospace` and it reports back
+  `Menlo,Monaco,Consolas`. So a declaration having no effect here does **not**
+  mean the value was wrong: check whether the *property* survives before
+  theorising about the value. Ignoring that turned one editor-caret bug into
+  four rounds of plausible, confidently-argued, wrong explanations.
+  Worth keeping if the editor ever goes back to a plain `<textarea>`: it draws
+  no caret at all under `ui-monospace, SFMono-Regular, …` (Chromium/Apple
+  keywords the host cannot resolve — name faces that exist), and once it does
+  draw one it is the theme's text colour on the white background the control
+  paints for itself on focus, so the element's own background and text have to
+  be pinned per theme. Its `line-height` is irrelevant; that was a guess too.
 - **One muted grey does not serve both themes.** Nothing here reacts to
   `prefers-color-scheme`; the panel reads `uxp.host.theme` and stamps
   `theme-dark`/`theme-light` on `<body>`, and the greys hang off that. Anything

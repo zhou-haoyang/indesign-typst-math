@@ -145,49 +145,25 @@ select {
   margin-top: var(--gap);
 }
 
-/* Two things here are load-bearing, and neither is for looks.
+/* Both editors are sp-textarea, so the box is all that is set here.
 
-   The font stack names faces that exist on the machine. Set in
-   `ui-monospace, SFMono-Regular, …` the editor drew no caret at all: those are
-   Chromium/Apple keywords, and this host appears to compute caret metrics from
-   a leading entry it cannot resolve while still painting text through the
-   fallback. It reports `Menlo,Monaco,Consolas` for the stack below — note that
-   it dropped the `monospace` generic, which is the same parser behaviour that
-   makes the colours below necessary.
+   Nothing else can be: the widget renders into a closed shadow root, and its
+   font, colours, caret and padding all belong to it. That is the trade — it
+   themes itself and draws a working caret, and in exchange the Typst source
+   cannot be monospaced. Do not add font-family or colour rules below expecting
+   them to land; they were tried, by host inheritance, ::part and injection.
 
-   Because it also drops `caret-color`. The caret exists, and takes the panel
-   theme's text colour — white on the dark theme — which the control then draws
-   onto the white background it paints for itself on focus. Invisible, and not
-   directly fixable.
-
-   So the editor's own colours are pinned per theme instead. That keeps the
-   caret in contrast whether it follows the element's `color` or the panel
-   theme, which is the point: it does not depend on knowing which. */
+   A custom element has no useful intrinsic size, so the box has to be stated. */
 #editor,
 #dlg-default-preamble {
-  font-family: Menlo, Monaco, Consolas, monospace;
-}
-
-.theme-dark #editor,
-.theme-dark #dlg-default-preamble {
-  background-color: #2b2b2b !important;
-  color: #f0f0f0 !important;
-}
-
-.theme-light #editor,
-.theme-light #dlg-default-preamble {
-  background-color: #ffffff !important;
-  color: #1a1a1a !important;
+  display: block;
+  width: 100%;
 }
 
 #editor {
   flex: 0 0 auto;
-  width: 100%;
   height: 84px;
   min-height: 48px;
-  resize: none;
-  font-size: 12px;
-  padding: 6px;
 }
 
 #preview {
@@ -299,15 +275,8 @@ dialog {
   margin-bottom: var(--gap);
 }
 
-/* Explicit width: it sits inside a plain block rather than directly in the
-   flex column, so it would otherwise take the textarea `cols` default and stay
-   narrow however wide the dialog gets. */
 #dlg-default-preamble {
-  width: 100%;
   height: 72px;
-  resize: none;
-  font-size: 11px;
-  padding: 6px;
 }
 
 #dlg-size-pt {
