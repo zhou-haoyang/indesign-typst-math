@@ -331,6 +331,16 @@ application. The InDesign ones are demonstrated by
   `prefers-color-scheme`; the panel reads `uxp.host.theme` and stamps
   `theme-dark`/`theme-light` on `<body>`, and the greys hang off that. Anything
   added to `:root` alone will be unreadable in one theme or the other.
+- **Getting the theme wrong is nearly silent.** `currentTheme()` matched
+  `/dark|darkest|medium/` *case-sensitively* and fell back to `"light"` when the
+  read threw, so a dark panel was served the light palette — and the symptom is
+  not an error but a panel that is merely hard to read: light greys on light
+  greys, a white preview, a white editor whatever the theme. It now matches
+  case-insensitively, treats "light" explicitly, and when the host says nothing
+  useful infers the theme from the luma of what it actually painted
+  (`getComputedStyle(document.body).backgroundColor`). The panel logs
+  `[typst] theme: "<raw>" → <resolved>`; check it before believing any
+  theme-dependent colour is at fault.
 - **A flyout `menuItems` entry without an `id` takes the commands down with it.**
   Every item needs one, *including a separator* — `{label: "-"}` is rejected with
   "'id' should be defined in menuItem object". Because `entrypoints.setup` may

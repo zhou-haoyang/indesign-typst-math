@@ -702,21 +702,51 @@ function watchSelection() {
   if (usingEvents) setInterval(onSelectionChanged, SELECTION_POLL_MS * 3);
 }
 
+function hostTheme() {
+  return String(tryGet(() => require("uxp").host.theme, ""));
+}
+
+/**
+ * Work the theme out from what the host actually painted, for when it will not
+ * say. The panel chrome is a grey either way, so a luma midpoint decides it.
+ * Returns null when the body is transparent, which tells us nothing.
+ */
+function themeFromPaint() {
+  const bg = String(tryGet(() => getComputedStyle(document.body).backgroundColor, ""));
+  const parts = /rgba?\(\s*(\d+)\D+(\d+)\D+(\d+)(?:\D+([\d.]+))?/.exec(bg);
+  if (!parts) return null;
+  if (parts[4] !== undefined && Number(parts[4]) === 0) return null;
+  const luma = 0.299 * Number(parts[1]) + 0.587 * Number(parts[2]) + 0.114 * Number(parts[3]);
+  return luma < 128 ? "dark" : "light";
+}
+
+/**
+ * InDesign reports one of lightest/light/medium/dark/darkest — but the match
+ * here was case-sensitive and defaulted to "light" when the read threw, so a
+ * dark panel was quietly served the light palette: light greys on light greys,
+ * a white preview, and a white editor whatever the theme.
+ */
 function currentTheme() {
-  const theme = tryGet(() => require("uxp").host.theme, "light");
-  return /dark|darkest|medium/.test(String(theme)) ? "dark" : "light";
+  const raw = hostTheme();
+  if (/dark|medium/i.test(raw)) return "dark";
+  if (/light/i.test(raw)) return "light";
+  return themeFromPaint() || "light";
 }
 
 async function start() {
   bindElements();
   // Before anything is drawn: this picks the muted greys, and the panel is
   // unreadable against the wrong chrome.
-  document.body.classList.add(`theme-${currentTheme()}`);
-  // What the font stack actually resolved to. The editor's missing caret
-  // tracks the font rather than the element, as far as anything here can tell,
-  // so this is the readout that says whether UXP found what was asked for.
-  console.log("[typst] editor font: " +
-    tryGet(() => getComputedStyle(el.editor).fontFamily, "unreadable"));
+  const theme = currentTheme();
+  document.body.classList.add(`theme-${theme}`);
+  // Both readouts exist because both have been wrong while looking fine. The
+  // font stack because this host drops entries it cannot resolve, and the theme
+  // because getting it wrong is nearly silent — it shows up as a panel that is
+  // merely hard to read rather than as an error.
+  console.log(`[typst] theme: "${hostTheme()}" → ${theme}` +
+    ` · painted ${tryGet(() => getComputedStyle(document.body).backgroundColor, "?")}` +
+    `\n[typst] editor: font ${tryGet(() => getComputedStyle(el.editor).fontFamily, "?")}` +
+    ` · background ${tryGet(() => getComputedStyle(el.editor).backgroundColor, "?")}`);
   wireEvents();
   applyDefaults();
   syncEditingUI();
@@ -735,7 +765,9 @@ async function start() {
     const { engine, wasmSource } = await backend.ready();
     state.engine = engine;
     state.wasmSource = wasmSource || "";
-    backend.setTheme(currentTheme());
+    // The same answer the panel styled itself with — the preview rendering
+    // light against a dark panel was the visible half of this being wrong.
+    backend.setTheme(theme);
     // Which wasm-loading strategy won is worth seeing: it varies with how UXP
     // resolves plugin: URLs, and it is the first thing to check if startup
     // breaks after a UXP update.
