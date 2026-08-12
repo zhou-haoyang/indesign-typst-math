@@ -20,6 +20,7 @@ const { rerenderAll } = require("../id/rerender");
 const fonts = require("./fonts");
 const prefs = require("./prefs");
 const dialogs = require("./settings-dialog");
+const editorFont = require("./editor-font");
 
 const PREVIEW_DEBOUNCE_MS = 250;
 const SELECTION_POLL_MS = 700;
@@ -712,6 +713,11 @@ async function start() {
   // Before anything is drawn: this picks the muted greys, and the panel is
   // unreadable against the wrong chrome.
   document.body.classList.add(`theme-${currentTheme()}`);
+  // Reported rather than assumed: whether a monospace face reaches inside an
+  // sp-textarea depends on the component, and the log names what was reachable
+  // so a failure does not cost another round of guessing.
+  console.log(`[typst] editor font: ${editorFont.applyMonospace(el.editor)}` +
+    ` · shadow: ${editorFont.describe(el.editor)}`);
   wireEvents();
   applyDefaults();
   syncEditingUI();

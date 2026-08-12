@@ -12,6 +12,7 @@
  */
 const fonts = require("./fonts");
 const prefs = require("./prefs");
+const editorFont = require("./editor-font");
 
 const el = {};
 /**
@@ -154,6 +155,10 @@ function configure(dependencies) {
 
 async function showSettings() {
   bind();
+  // On every open, not just the first: a component that has never been shown
+  // may not have a shadow root yet, and applyMonospace only marks itself done
+  // once it has actually reached one.
+  editorFont.applyMonospace(el.defaultPreamble);
   renderFonts();
   loadPrefs();
   el.engine.textContent = deps.engine() || "";

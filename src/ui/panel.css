@@ -146,17 +146,28 @@ select {
 }
 
 /* Both editors are sp-textarea, not <textarea>: the plain element draws no
-   visible caret in this host, and neither removing its line-height nor pinning
-   caret-color brought one back. A custom element needs its box stating
+   visible caret in this host. A custom element needs its box stating
    explicitly — it has no useful intrinsic size — and its padding and border
-   belong to the component, so nothing here sets them. Whether the monospace
-   family reaches the inner control depends on the component inheriting it. */
+   belong to the component, so nothing here sets them.
+
+   The monospace family is stated three times on purpose, because the real
+   control lives in a shadow root and which route reaches it depends on the
+   component: on the host in case it inherits, through ::part in case one is
+   exposed, and from src/ui/editor-font.js into the shadow root itself. Typst
+   source in a proportional face is the symptom when none of them land. */
 #editor,
 #dlg-default-preamble {
   display: block;
   width: 100%;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
   caret-color: #1a1a1a;
+}
+
+#editor::part(input),
+#dlg-default-preamble::part(input),
+#editor::part(textarea),
+#dlg-default-preamble::part(textarea) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
 }
 
 #editor {

@@ -312,7 +312,10 @@ application. The InDesign ones are demonstrated by
   brought one back — both were guesses, and both were wrong. What works is
   `sp-textarea`. It is a custom element, so it needs its box stated explicitly
   and owns its own padding; read and write it through the three helpers at the
-  top of `src/ui/panel.js` rather than reaching for `.value` directly.
+  top of `src/ui/panel.js` rather than reaching for `.value` directly. Its real
+  control is in a shadow root, so `font-family` on the host does not reach it —
+  `src/ui/editor-font.js` tries the host, `::part`, and a style injected into
+  the shadow root, and logs which was reachable.
 - **One muted grey does not serve both themes.** Nothing here reacts to
   `prefers-color-scheme`; the panel reads `uxp.host.theme` and stamps
   `theme-dark`/`theme-light` on `<body>`, and the greys hang off that. Anything
