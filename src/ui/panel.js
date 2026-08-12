@@ -607,6 +607,32 @@ function invokeMenu(id) {
 
 /* -------------------------------------------------------------------- boot */
 
+/**
+ * Spectrum variants on the standard controls.
+ *
+ * UXP extends a plain `<button>` with `uxpVariant`/`uxpQuiet`/`uxpSelected`
+ * rather than requiring `sp-button`, which is why these have looked native all
+ * along — so this is the whole of what converting to Spectrum widgets would
+ * have bought, without giving up the CSS that sizes the icon buttons. Set as
+ * properties, since that is where they were found; the CSS fallbacks stay in
+ * place in case a host does not honour them.
+ */
+function setVariant(element, variant, quiet) {
+  if (!element) return;
+  try {
+    if (variant) element.uxpVariant = variant;
+    if (quiet) element.uxpQuiet = true;
+  } catch { /* the CSS fallback carries it */ }
+}
+
+function applyButtonVariants() {
+  setVariant(el.insert, "cta");
+  setVariant(el.revert, "secondary");
+  setVariant(el.settingsToggle, null, true);
+  setVariant(el.preambleSaveDefault, "secondary");
+  setVariant(el.preambleResetDefault, "secondary");
+}
+
 function bindElements() {
   for (const [key, id] of Object.entries({
     editor: "editor", preview: "preview", status: "status", insert: "insert",
@@ -744,9 +770,7 @@ async function start() {
   // preview and the panel's own greys apart for a long time without complaint.
   console.log(`[typst] theme: "${hostTheme()}" → ${theme}` +
     ` · painted ${tryGet(() => getComputedStyle(document.body).backgroundColor, "?")}`);
-  // TEMPORARY: which Spectrum widgets this host implements, ahead of deciding
-  // how much of the panel to convert. Remove this and the module with it.
-  console.log(require("./widget-probe").report());
+  applyButtonVariants();
   wireEvents();
   applyDefaults();
   syncEditingUI();

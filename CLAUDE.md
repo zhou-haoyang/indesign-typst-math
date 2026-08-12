@@ -320,6 +320,30 @@ application. The InDesign ones are demonstrated by
   Read and write the widget through the three helpers at the top of
   `src/ui/panel.js`, never `.value` directly; that is what has kept each swap of
   this control to two files.
+- **The standard controls are already the native ones.** UXP extends a plain
+  `<button>` and `<select>` with `uxpVariant` / `uxpQuiet` / `uxpSelected`
+  properties, which is why they render as Spectrum controls with no `sp-*` tag
+  in sight. Setting those (see `applyButtonVariants` in `src/ui/panel.js`) is
+  the whole of what converting to `sp-button` would buy, and it keeps the CSS
+  that sizes the icon buttons — an `sp-*` widget's shadow root is closed, so
+  `button.icon { min-width }` would stop applying.
+  Measured in this host, so as not to be re-probed: `sp-button`,
+  `sp-action-button`, `sp-picker`, `sp-dropdown`, `sp-textfield` (including
+  `type="number"` and `multiline`), `sp-textarea`, `sp-label` and `sp-checkbox`
+  are implemented; **`sp-tabs` is not**, which is why the tab strip is `<span>`s
+  and should stay that way. `sp-picker`/`sp-dropdown` accepted a `value` write
+  and read back `undefined` when built inside a hidden container, so they
+  probably need to be connected and laid out before their menu is usable —
+  worth knowing before anyone converts the six `<select>`s.
+  How to test this again, since three obvious approaches do not work here:
+  `getBoundingClientRect` returns 0x0 outside the visible flow, `constructor
+  .name` is unavailable on every element, and `customElements.get` denies
+  `sp-textarea`, which demonstrably works — the Spectrum widgets are host
+  built-ins, not registered custom elements. What does work is comparing an
+  element's prototype against the one the host gives a **deliberately nonexistent
+  hyphenated tag**. Always include that nonsense tag and a known-good control in
+  any such probe; two versions of this one reported confident nonsense and were
+  caught only by their controls.
 - **UXP's CSS parser silently drops what it does not implement.** `caret-color`
   is discarded, exactly as the `monospace` generic is discarded from a font
   stack — ask for `Menlo, Monaco, Consolas, monospace` and it reports back

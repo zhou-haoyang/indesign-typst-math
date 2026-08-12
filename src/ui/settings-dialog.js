@@ -36,7 +36,21 @@ function bind() {
     el[key] = document.getElementById(id);
   }
   el.bound = true;
+  // UXP extends the standard controls with Spectrum variants, so no sp-button
+  // is needed to get them. See the note in panel.js.
+  setVariant(el.done, "cta");
+  setVariant(el.messageOk, "cta");
+  setVariant(el.addFonts, "secondary");
+  setVariant(el.clearFonts, "secondary");
   wire();
+}
+
+function setVariant(element, variant, quiet) {
+  if (!element) return;
+  try {
+    if (variant) element.uxpVariant = variant;
+    if (quiet) element.uxpQuiet = true;
+  } catch { /* the CSS fallback carries it */ }
 }
 
 /**
@@ -83,6 +97,7 @@ function renderFonts() {
     const remove = document.createElement("button");
     remove.textContent = "✕";
     remove.title = `Remove ${name}`;
+    setVariant(remove, null, true);
     remove.addEventListener("click", async () => {
       fonts.remove(index);
       renderFonts();
