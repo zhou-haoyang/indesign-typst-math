@@ -229,6 +229,26 @@ const result = await runUxp(driver(`
       parent: floated.frame.parent.constructor.name,
       labelBody: (readRecord(floated.frame) || {}).body || null,
     });
+
+    // The undo wrapper, which every real insert goes through and none of the
+    // cases above did. app.doScript marshals its return value and keeps only
+    // scalars — an object arrives with no properties whatever — so placeNew
+    // returning {frame, anchored} is not enough on its own: the panel reads
+    // that through asOneUndo, and read it as {} for a long time, reporting
+    // every inline insert as "on the page".
+    const { asOneUndo } = require("./src/id/doc.js");
+    const carriedScalar = asOneUndo("Probe scalar", () => 42);
+    const carried = asOneUndo("Insert Typst equation", () => withPoints(doc, () =>
+      placeNew(doc, c0.pdf, { width: c0.width, height: c0.height, depth: c0.depth },
+               recordFor(c0),
+               { kind: "text", insertionPoint: frame.parentStory.insertionPoints.item(2) })));
+    results.push({
+      kind: "undo-result",
+      keys: carried && typeof carried === "object" ? Object.keys(carried) : null,
+      anchored: carried ? carried.anchored : null,
+      frameUsable: !!(carried && carried.frame && carried.frame.isValid),
+      scalar: carriedScalar,
+    });
   } finally {
     doc.close(idsn.SaveOptions.NO);
   }
@@ -270,6 +290,19 @@ for (const r of result.results) {
       fail(`set preamble read back as ${JSON.stringify(r.setText)}`);
     }
     if (failures === before) console.log("     all three states distinguishable");
+    continue;
+  }
+
+  if (r.kind === "undo-result") {
+    console.log(`\n[undo] what survives app.doScript, which the panel reads`);
+    const before = failures;
+    if (r.scalar !== 42) fail(`a scalar result came back as ${JSON.stringify(r.scalar)}`);
+    if (r.anchored !== true) {
+      fail(`anchored came back as ${JSON.stringify(r.anchored)} (keys: ` +
+        `${JSON.stringify(r.keys)}) — every inline insert would report itself as on the page`);
+    }
+    if (!r.frameUsable) fail("the placed frame did not survive, so Update cannot find it");
+    if (failures === before) console.log("     {frame, anchored} survives the undo wrapper");
     continue;
   }
 

@@ -396,6 +396,16 @@ application. The InDesign ones are demonstrated by
   correctly**, which is how this was pinned down. So a plugin cannot put a
   working item on a context menu this way; use the flyout or a command
   entrypoint. (Measured on 21.4.1.4.)
+- **`app.doScript` keeps only scalars out of what it returns.** A returned
+  number arrives; a returned *object* arrives as an object with **no properties
+  at all** — `Object.keys()` is `[]`, no throw, no warning. So the undo wrapper
+  cannot pass a result back by returning it: `asOneUndo` assigns it to a closure
+  variable inside the call instead, which survives intact, DOM proxies included.
+  Getting this wrong is quiet and confusing rather than fatal — `{frame,
+  anchored}` came back as `{}`, so every inline insert announced itself as
+  "Inserted on the page", and the panel lost the frame it had just placed. It
+  hid because the live test drove `placeNew` directly and never crossed the
+  doScript boundary; the `undo-result` case in `tools/test-plugin.mjs` now does.
 - **UXP enum values do not compare with `===`.** `swatch.space` and
   `ColorSpace.CMYK` both stringify to "CMYK" and are still not equal, so a
   direct comparison silently fails every branch — which is how "match text

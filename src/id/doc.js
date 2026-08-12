@@ -34,15 +34,25 @@ function withPoints(doc, fn) {
 }
 
 /**
- * Run `fn` as a single undo step.
+ * Run `fn` as a single undo step, and hand back what it returned.
  *
  * `fn` must be synchronous — doScript cannot await — so compile the expression
  * and write the temp file before calling this.
+ *
+ * **doScript marshals its return value and keeps only scalars.** A number comes
+ * back; an object comes back as an object with *no properties at all* — no
+ * throw, no warning. Returning it directly is therefore a silent data loss, and
+ * it is why every insert reported itself as unanchored: `{frame, anchored}`
+ * arrived as `{}`. A closure assignment made inside `fn` does survive, DOM
+ * proxies included, so the result is caught on the way out instead.
  */
 function asOneUndo(name, fn) {
+  let result;
+  const capture = () => { result = fn(); };
   try {
-    return app.doScript(fn, idsn.ScriptLanguage.UXPSCRIPT, [],
+    app.doScript(capture, idsn.ScriptLanguage.UXPSCRIPT, [],
       idsn.UndoModes.ENTIRE_SCRIPT, name);
+    return result;
   } catch (err) {
     // Losing a tidy undo group is much better than losing the edit.
     if (/doScript|argument|ScriptLanguage/i.test(String(err && err.message))) return fn();
