@@ -2,3 +2,4 @@ node_modules/
 vendor/
 .DS_Store
 .uxp-driver-*.idjs
+.ui-shots/

@@ -28,10 +28,8 @@ body {
   padding: var(--pad);
 }
 
-.toolbar,
-.statusbar,
-.pane-actions,
-.settings-actions {
+.row,
+.statusbar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -39,8 +37,26 @@ body {
   flex: 0 0 auto;
 }
 
+/* The gear stays on the first row; only .controls wraps. Left to one flex row,
+   the spacer pushed the gear onto a line of its own as soon as the four
+   controls no longer fitted, which is most docked widths. */
 .toolbar {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--gap);
+  flex: 0 0 auto;
   padding-bottom: var(--pad);
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--gap);
+  flex: 1 1 auto;
+  /* Lets the row shrink below its content width so that it wraps rather than
+     pushing the gear along. */
+  min-width: 0;
 }
 
 .statusbar {
@@ -65,25 +81,28 @@ select {
   min-width: 74px;
 }
 
-#size-pt {
+#size-pt,
+#dlg-size-pt {
   width: 58px;
 }
 
 /* Tabs */
 
+/* Spans, not buttons: UXP draws a <button> as a native pill and ignores
+   background/border, so button-based tabs came out as pills with a stray
+   underline floating beneath them. Flex blockifies these, so the underline and
+   padding behave. */
 .tabs {
   display: flex;
-  gap: 2px;
   flex: 0 0 auto;
-  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--pad);
 }
 
 .tab {
-  border: none;
+  padding: 3px 10px;
+  margin-bottom: -1px;
   border-bottom: 2px solid transparent;
-  border-radius: 0;
-  background: none;
-  padding: 2px 8px;
   color: var(--muted);
 }
 
@@ -96,33 +115,32 @@ select {
    Equation tab that one is in force. */
 .dot {
   color: var(--accent);
-  padding-left: 4px;
-}
-
-.pane {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  padding-left: 5px;
 }
 
 .hint {
+  display: block;
   color: var(--muted);
+  margin-top: 4px;
 }
 
 .hint:empty {
   display: none;
 }
 
-#editor,
-#preamble {
+#preamble-actions {
+  margin-top: var(--gap);
+}
+
+/* No line-height: UXP positions the caret from it and gets it wrong, which
+   presents as a textarea you can type into with no visible cursor. */
+#editor {
   flex: 0 0 auto;
   height: 84px;
   min-height: 48px;
   resize: none;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
-  line-height: 1.45;
   padding: 6px;
 }
 
@@ -166,7 +184,10 @@ button.cta {
   font-weight: bold;
 }
 
+/* Never shrinks, so it cannot be squeezed out of the toolbar by the controls
+   beside it. */
 button.icon {
+  flex: 0 0 auto;
   min-width: 26px;
   padding: 2px 6px;
 }
@@ -190,15 +211,39 @@ dialog {
 .dlg {
   display: flex;
   flex-direction: column;
-  gap: var(--gap);
-  min-width: 300px;
+  min-width: 280px;
 }
 
-.settings-row {
-  display: flex;
-  align-items: baseline;
-  gap: var(--gap);
-  margin-top: 4px;
+/* Vertical rhythm from margins, not `gap`: a flex row with `gap` ran the label
+   and its hint together ("FontsAdded to the compiler…"), so the spacing that
+   holds this dialog together does not depend on the parts of flexbox UXP
+   implements unevenly. */
+.section {
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-title {
+  display: block;
+  font-weight: bold;
+}
+
+.section .hint {
+  margin-top: 2px;
+  margin-bottom: 6px;
+}
+
+.section .row + .row {
+  margin-top: var(--gap);
+}
+
+/* The last two sections are the read-only footer: no rule under them, and no
+   heading to separate from. */
+.section:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: var(--gap);
 }
 
 #dlg-default-preamble {
@@ -215,7 +260,7 @@ dialog {
 
 .font-list {
   list-style: none;
-  margin: 0;
+  margin: 0 0 var(--gap) 0;
   padding: 0;
   max-height: 76px;
   overflow: auto;

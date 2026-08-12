@@ -99,6 +99,26 @@ and the modal), which still need a human reloading the plugin — though
 Everything under `webview/` is covered by the browser suite, being plain browser
 code.
 
+### Looking at the panel without InDesign
+
+`node tools/render-panel.mjs [--width 340]` screenshots `index.html` in headless
+Chrome into `.ui-shots/`, pulling the markup out of the real file so it cannot
+drift. It catches the mistakes that are yours — wrong order, a missing label, a
+control with no spacing — in seconds rather than a plugin reload.
+
+**It is not a test of the panel, and it is blind to the whole class of bug this
+UI has actually had**: `gap` that works in Chrome and collapses in UXP, a
+`<button>` that ignores `background` and draws a native pill, a `<textarea>` in a
+hidden subtree that never becomes focusable. Chrome shows none of those. Treat a
+clean screenshot as "my markup is sane", never as "this works".
+
+And read its own caveat before believing a negative: `--window-size` sets the
+screenshot canvas, not the layout viewport, so the page is given an explicit
+body width. Without that it lays out wide and the screenshot merely *crops* —
+which reads convincingly as every right-aligned control having disappeared. When
+a shot looks wrong, measure the geometry (`getBoundingClientRect` through
+`tools/harness.mjs`) before changing any CSS.
+
 ### When the panel itself misbehaves
 
 The webview has its own console, separate from the panel's, so a broken bridge
@@ -276,6 +296,14 @@ application. The InDesign ones are demonstrated by
 - **Stroke weight is alignment-critical.** InDesign anchors the
   *stroke-inclusive* bottom edge to the baseline, so any weight shifts an
   equation by half of it — even with colour None, when nothing is visible.
+- **UXP's CSS and native controls are not Chromium's, in ways that bite the
+  panel.** Three met so far: `gap` on a flex row silently does nothing in some
+  contexts (a label and its hint rendered as "FontsAdded to the compiler…"), so
+  vertical rhythm in the dialog comes from margins; a `<button>` is drawn as a
+  native pill that ignores `background`/`border`, so the tab strip is built from
+  `<span>`s; and a `<textarea>` that spends its life inside a `display: none`
+  subtree never becomes editable, which is why the two editor tabs share one
+  textarea and swap its contents rather than hiding one.
 - **A flyout `menuItems` entry without an `id` takes the commands down with it.**
   Every item needs one, *including a separator* — `{label: "-"}` is rejected with
   "'id' should be defined in menuItem object". Because `entrypoints.setup` may

@@ -29,7 +29,13 @@ const COMPILER_GRACE_MS = 3000;
 const state = {
   engine: "",
   wasmSource: "",
+  /**
+   * Which buffer `el.editor` is currently showing. One textarea serves both
+   * tabs: two of them, with the inactive one hidden, left the preamble
+   * permanently unfocusable.
+   */
   tab: "equation",
+  body: "",
   mode: "inline",
   sizeMode: "auto",
   sizePt: 10,
@@ -132,7 +138,7 @@ function resolveTypography() {
 function currentSpec() {
   const { size, color } = resolveTypography();
   return {
-    body: el.editor.value,
+    body: state.body,
     mode: state.mode,
     size,
     color,
@@ -337,7 +343,11 @@ function onSelectionChanged() {
 
 function loadRecord({ frame, record }) {
   state.editing = { frame, record, id: tryGet(() => frame.id, null) };
-  el.editor.value = record.body || "";
+  state.body = record.body || "";
+  // Selecting an equation is a request to see its source, so come back from the
+  // preamble tab if that is where we were.
+  switchTab("equation");
+  el.editor.value = state.body;
   state.mode = record.mode === "display" ? "display" : "inline";
   el.mode.value = state.mode;
   if (record.size) {
@@ -384,7 +394,7 @@ function loadDocumentPreamble() {
   const before = state.preamble;
   state.preambleFromDefault = !stored.present && !!fallback;
   state.preamble = stored.present ? stored.text : (fallback || "");
-  el.preamble.value = state.preamble;
+  showInEditor("preamble", state.preamble);
   syncPreambleUI();
   // Switching documents can change what the same expression compiles to, and
   // the selection watcher will not notice if the selection looks the same in
@@ -394,7 +404,7 @@ function loadDocumentPreamble() {
 
 function syncPreambleUI() {
   el.preambleDot.classList.toggle("hidden", !state.preamble.trim());
-  el.preambleHint.textContent = state.preambleFromDefault
+  el.preambleHint.textContent = state.tab === "preamble" && state.preambleFromDefault
     ? "From your default — saved into this document when you insert an equation."
     : "";
 }
@@ -435,19 +445,38 @@ async function reloadFonts(announce) {
 
 /* -------------------------------------------------------------------- tabs */
 
+const PLACEHOLDER = {
+  equation: "Typst math, e.g.  sum_(i=1)^n x_i / 2",
+  preamble: "#let vb(x) = math.bold(x)\n#set text(font: \"New Computer Modern\")",
+};
+
 /**
  * The preamble is a tab rather than a drawer because it wants the live preview
  * below it exactly as much as the equation does — and for the same reason it is
  * not in the settings dialog, which would cover the preview entirely.
+ *
+ * The two tabs share one textarea, so switching means writing the visible text
+ * back to the buffer it belongs to and loading the other.
  */
 function switchTab(name) {
+  if (state.tab === name) return;
+  if (state.tab === "preamble") state.preamble = el.editor.value;
+  else state.body = el.editor.value;
+
   state.tab = name;
   const preamble = name === "preamble";
-  el.editor.classList.toggle("hidden", preamble);
-  el.preamblePane.classList.toggle("hidden", !preamble);
+  el.editor.value = preamble ? state.preamble : state.body;
+  el.editor.placeholder = PLACEHOLDER[name];
+  el.preambleActions.classList.toggle("hidden", !preamble);
   el.tabEquation.classList.toggle("active", !preamble);
   el.tabPreamble.classList.toggle("active", preamble);
-  (preamble ? el.preamble : el.editor).focus();
+  syncPreambleUI();
+  el.editor.focus();
+}
+
+/** Show `text` in the editor when the tab it belongs to is the visible one. */
+function showInEditor(tab, text) {
+  if (state.tab === tab) el.editor.value = text;
 }
 
 /* ---------------------------------------------------------------- defaults */
@@ -555,8 +584,8 @@ function bindElements() {
     revert: "revert", mode: "mode", sizeMode: "size-mode", sizePt: "size-pt",
     colorMode: "color-mode", settingsToggle: "settings-toggle",
     tabEquation: "tab-equation", tabPreamble: "tab-preamble",
-    preambleDot: "preamble-dot", preamblePane: "preamble-pane",
-    preamble: "preamble", preambleHint: "preamble-hint",
+    preambleDot: "preamble-dot", preambleActions: "preamble-actions",
+    preambleHint: "preamble-hint",
     preambleSaveDefault: "preamble-save-default",
     preambleResetDefault: "preamble-reset-default",
   })) {
@@ -565,7 +594,18 @@ function bindElements() {
 }
 
 function wireEvents() {
-  el.editor.addEventListener("input", requestPreview);
+  el.editor.addEventListener("input", () => {
+    if (state.tab === "preamble") {
+      state.preamble = el.editor.value;
+      // Editing it makes it this document's, whatever it started as.
+      state.preambleFromDefault = false;
+      syncPreambleUI();
+      savePreamble();
+    } else {
+      state.body = el.editor.value;
+    }
+    requestPreview();
+  });
   el.editor.addEventListener("keydown", (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();
@@ -604,21 +644,13 @@ function wireEvents() {
   el.tabEquation.addEventListener("click", () => switchTab("equation"));
   el.tabPreamble.addEventListener("click", () => switchTab("preamble"));
 
-  el.preamble.addEventListener("input", () => {
-    state.preamble = el.preamble.value;
-    // Editing it makes it this document's, whatever it started as.
-    state.preambleFromDefault = false;
-    syncPreambleUI();
-    savePreamble();
-    requestPreview();
-  });
   el.preambleSaveDefault.addEventListener("click", () => {
     prefs.write({ defaultPreamble: state.preamble });
     setStatus("Saved as your default preamble for new documents.");
   });
   el.preambleResetDefault.addEventListener("click", () => {
     state.preamble = prefs.read().defaultPreamble;
-    el.preamble.value = state.preamble;
+    showInEditor("preamble", state.preamble);
     state.preambleFromDefault = false;
     syncPreambleUI();
     savePreamble();
