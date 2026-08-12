@@ -6,26 +6,39 @@
  *
  * Every guess about a UXP control in this plugin's history has been wrong at
  * least once, and each wrong one costs a plugin reload, so nothing here asks
- * anyone to judge by eye. Each candidate is built off-screen, measured, and
- * reported:
+ * anyone to judge by eye.
  *
- *   - **def** is the real discriminator: whether the tag is a registered custom
- *     element. Size is not — an unregistered tag with text in it still lays out
- *     as inline content with a height, and `.value` "round-trips" on anything,
- *     because on an unregistered element that is just a JS property nobody
- *     reads. Both of those looked like evidence in an earlier draft of this
- *     probe and were not.
- *   - **ctor** is the fallback for the same question, for if the host does not
- *     expose a custom element registry: an unregistered `sp-*` name constructs
- *     as a plain `HTMLElement`.
- *   - **size** is still worth seeing, since a registered widget that renders to
- *     nothing is its own kind of broken.
- *   - **shadow** says whether anything inside can be styled from outside.
- *     `sp-textarea` answers "closed/none", which is what costs the monospace
- *     face; expect the same elsewhere, but confirm rather than assume.
+ * Five discriminators have been tried and four were worthless. Keeping the
+ * record because every one of them looked like evidence:
  *
- * `sp-textarea` is the positive control and plain `button`/`select` are the
- * baselines, so a row of failures can be told from a broken probe.
+ *   - **rendered size** — `getBoundingClientRect` returns 0x0 for everything in
+ *     this host, plain `<button>` included, so nothing off-screen is laid out
+ *     to measure. Dropped.
+ *   - **`constructor.name`** — reports "?" for every element here, `<button>`
+ *     included. Dropped.
+ *   - **`customElements.get(tag)`** — reports NO for `sp-textarea`, which the
+ *     panel is built on and which demonstrably works. UXP's Spectrum widgets
+ *     are implemented by the host, not registered as custom elements, so the
+ *     registry is the wrong question. Dropped.
+ *   - **writing `.value` and reading it back** — "round-trips" on any element
+ *     at all, since on an unimplemented one that is a plain JS property nobody
+ *     reads. Useless alone, but a value that comes back *changed* does prove a
+ *     native accessor is intercepting.
+ *
+ *   - **prototype vs a `<div>`'s** — an unimplemented `sp-*` falls back to the
+ *     *base* element prototype, which a div's differs from as well, so this
+ *     called everything implemented. Dropped.
+ *
+ * What works is the prototype compared against a **derived** reference: ask for
+ * a tag that certainly does not exist and see what it gets. Anything sharing
+ * that prototype is unimplemented. No layout, no registry, no names, and no
+ * assumption about what the fallback should be — each of which broke a previous
+ * version.
+ *
+ * Controls, and they are the point: `button`/`select`/`sp-textarea` must all
+ * come back YES, and the nonsense tag must come back `.`. **If they do not, the
+ * probe is broken and the rest of the table means nothing.** That is twice now
+ * that this has caught a probe reporting confident nonsense.
  */
 
 /** @param {{tag: string, attrs?: object, text?: string, children?: object[]}} spec */
@@ -39,6 +52,16 @@ function build(spec) {
   return node;
 }
 
+/**
+ * A tag that certainly does not exist. Whatever prototype the host gives this
+ * is, by definition, the "unimplemented" one — which is the reference every
+ * other row is compared against.
+ *
+ * Declared here rather than beside its helper below because CANDIDATES uses it,
+ * and a `const` referenced before its initialiser throws at module load.
+ */
+const NONSENSE_TAG = "sp-certainly-not-a-widget-xyz";
+
 const MENU = [{
   tag: "sp-menu",
   attrs: { slot: "options" },
@@ -49,12 +72,12 @@ const MENU = [{
 }];
 
 const CANDIDATES = [
-  // Baselines: what the panel uses today, so a zeroed row can be told from a
-  // probe that simply is not working.
+  // Positive controls: what the panel uses today and demonstrably works.
   { name: "button (plain)", tag: "button", text: "Insert" },
   { name: "select (plain)", tag: "select" },
-  // Positive control: known to render, known to have a closed shadow root.
   { name: "sp-textarea", tag: "sp-textarea", value: "x^2" },
+  // Negative control. If this says YES, the probe is measuring nothing.
+  { name: "NONSENSE (must be .)", tag: NONSENSE_TAG, value: "z" },
 
   { name: "sp-button[cta]", tag: "sp-button", attrs: { variant: "cta" }, text: "Insert" },
   { name: "sp-button[secondary]", tag: "sp-button", attrs: { variant: "secondary" }, text: "Revert" },
@@ -77,11 +100,27 @@ const CANDIDATES = [
   { name: "sp-checkbox", tag: "sp-checkbox", text: "On" },
 ];
 
-function registry() {
+/**
+ * The prototype an *unimplemented* hyphenated tag gets. Derived rather than
+ * assumed, because assuming it is what broke the previous version: a `<div>` is
+ * the wrong reference, since an unimplemented `sp-*` falls back to the base
+ * element prototype, which a div's differs from too — so everything compared as
+ * "implemented".
+ */
+function unimplementedPrototype() {
+  return Object.getPrototypeOf(document.createElement(NONSENSE_TAG));
+}
+
+/** Members the widget's own prototype adds, which is a sketch of its API. */
+function ownMembers(node) {
   try {
-    return typeof customElements === "undefined" ? null : customElements;
+    const proto = Object.getPrototypeOf(node);
+    if (!proto || proto === unimplementedPrototype()) return [];
+    return Object.getOwnPropertyNames(proto)
+      .filter((n) => n !== "constructor")
+      .slice(0, 6);
   } catch {
-    return null;
+    return [];
   }
 }
 
@@ -89,33 +128,39 @@ function measure(host, spec) {
   const node = build(spec);
   host.appendChild(node);
 
-  const box = node.getBoundingClientRect();
-  const shadow = node.shadowRoot ? "open" : "closed/none";
-  const registered = registry();
-  const ctor = String((node.constructor && node.constructor.name) || "?");
+  // The one signal that survives this host: an implemented element carries its
+  // own prototype, an unimplemented one shares the plain element's.
+  let own = false;
+  try {
+    own = Object.getPrototypeOf(node) !== unimplementedPrototype();
+  } catch { /* leave it false and let the baselines expose that */ }
 
-  let def;
-  if (spec.tag.indexOf("-") === -1) {
-    def = "n/a";                                  // a plain element is not a custom one
-  } else if (!registered) {
-    def = "?";                                    // no registry to ask
-  } else {
-    def = registered.get(spec.tag) ? "yes" : "NO";
-  }
+  const before = (() => {
+    try { return typeof node.value; } catch { return "threw"; }
+  })();
 
   let value = "-";
   if (spec.value !== undefined) {
     try {
       node.value = spec.value;
       const read = node.value;
-      value = read === spec.value ? "ok" : `wrote ${JSON.stringify(spec.value)}, read ${JSON.stringify(read)}`;
+      value = read === spec.value
+        ? `ok (was ${before})`
+        : `wrote ${JSON.stringify(spec.value)}, read ${JSON.stringify(read)}`;
     } catch (err) {
       value = `threw: ${(err && err.message) || err}`;
     }
   }
+
   return {
-    name: spec.name, def, ctor,
-    w: Math.round(box.width), h: Math.round(box.height), shadow, value,
+    name: spec.name,
+    own,
+    // A native accessor that rewrites what you gave it is implemented too, even
+    // if the prototype test somehow misses it.
+    intercepts: spec.value !== undefined && !/^ok /.test(value) && !/^threw/.test(value),
+    members: ownMembers(node).join(",") || "-",
+    shadow: node.shadowRoot ? "open" : "closed/none",
+    value,
   };
 }
 
@@ -123,13 +168,10 @@ function measure(host, spec) {
 function report() {
   let host = null;
   try {
-    // Off-screen rather than hidden: display:none would measure 0 for
-    // everything and prove nothing. Laid out, just not where anyone sees it.
+    // Hidden is fine: nothing here measures layout any more, and layout was
+    // never available off-screen in this host anyway.
     host = document.createElement("div");
-    host.style.position = "absolute";
-    host.style.left = "-10000px";
-    host.style.top = "0";
-    host.style.width = "320px";
+    host.style.display = "none";
     document.body.appendChild(host);
 
     const lines = CANDIDATES.map((spec) => {
@@ -138,19 +180,17 @@ function report() {
         row = measure(host, spec);
       } catch (err) {
         row = {
-          name: spec.name, def: "?", ctor: "-", w: 0, h: 0, shadow: "-",
+          name: spec.name, own: false, intercepts: false, members: "-", shadow: "-",
           value: `build threw: ${(err && err.message) || err}`,
         };
       }
-      // An unregistered custom element constructs as a plain HTMLElement; that
-      // is the tell when there is no registry to ask.
-      const missing = row.def === "NO" || (row.def === "?" && row.ctor === "HTMLElement");
-      return `  ${row.name.padEnd(24)} def ${row.def.padEnd(4)} ${row.ctor.padEnd(20)}` +
-        ` ${`${row.w}x${row.h}`.padEnd(9)} shadow ${row.shadow.padEnd(12)} value ${row.value}` +
-        (missing ? "   <- NOT IMPLEMENTED" : "");
+      const yes = row.own || row.intercepts;
+      return `  ${(yes ? "YES " : "  . ")}${row.name.padEnd(24)}` +
+        ` shadow ${row.shadow.padEnd(12)} value ${String(row.value).padEnd(34)} ${row.members}`;
     });
-    const reg = registry() ? "present" : "ABSENT (falling back to constructor names)";
-    return `[typst] Spectrum widget probe · customElements ${reg}\n${lines.join("\n")}`;
+    return "[typst] Spectrum widget probe — YES = implemented (own prototype)\n" +
+      "        Controls: button, select, sp-textarea MUST be YES; NONSENSE MUST be '.'\n" +
+      lines.join("\n");
   } catch (err) {
     return `[typst] widget probe failed: ${(err && err.message) || err}`;
   } finally {
