@@ -327,6 +327,16 @@ application. The InDesign ones are demonstrated by
   Read and write the widget through the three helpers at the top of
   `src/ui/panel.js`, never `.value` directly; that is what kept each of these
   swaps to two files.
+  **On why this is a plain `<textarea>` when Adobe recommends otherwise.** The
+  documented order of preference is Spectrum Web Components, then `sp-*`
+  widgets, then plain HTML — and for multiline that means `sp-textarea` or
+  `sp-textfield[multiline]`. That guidance optimises for Spectrum-consistent
+  chrome; this control is a code editor, and the closed shadow root above makes
+  a monospace face impossible, which is exactly the case the third tier exists
+  for. SWC is not available here in any event: `document.createElement` does not
+  work for it, and it needs a build step this project deliberately does not
+  have. `sp-textfield[multiline]` is the one option never tried; expect the same
+  closed root, but that is a guess and this control has punished several.
 - **One muted grey does not serve both themes.** Nothing here reacts to
   `prefers-color-scheme`; the panel reads `uxp.host.theme` and stamps
   `theme-dark`/`theme-light` on `<body>`, and the greys hang off that. Anything
