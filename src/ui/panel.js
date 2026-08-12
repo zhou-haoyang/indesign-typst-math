@@ -744,6 +744,9 @@ async function start() {
   // preview and the panel's own greys apart for a long time without complaint.
   console.log(`[typst] theme: "${hostTheme()}" → ${theme}` +
     ` · painted ${tryGet(() => getComputedStyle(document.body).backgroundColor, "?")}`);
+  // TEMPORARY: which Spectrum widgets this host implements, ahead of deciding
+  // how much of the panel to convert. Remove this and the module with it.
+  console.log(require("./widget-probe").report());
   wireEvents();
   applyDefaults();
   syncEditingUI();
