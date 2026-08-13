@@ -334,11 +334,20 @@ dialog {
    and its hint together ("FontsAdded to the compiler…"), so the spacing that
    holds this dialog together does not depend on the parts of flexbox UXP
    implements unevenly. */
+/* The rules between sections are <sp-divider>s, not a border-bottom here: the
+   host paints those itself, so they are Spectrum's own rule in both themes
+   without this file naming a colour — the same reason the labels are sp-label.
+   A custom element has no useful intrinsic size, so the box has to be stated. */
 .section {
   flex: 0 0 auto;
+  margin-bottom: 12px;
+}
+
+sp-divider {
+  display: block;
+  width: 100%;
+  flex: 0 0 auto;
   margin-bottom: 14px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border);
 }
 
 /* The one section that takes the slack. Tall dialog: this grows and the editor
@@ -376,9 +385,9 @@ dialog {
 
 /* The last two sections are the read-only footer: no rule under them, and no
    heading to separate from. */
+/* The last section is the read-only footer: no divider above it to balance
+   against, and nothing below it but the pinned Done row. */
 .section:last-of-type {
-  border-bottom: none;
-  padding-bottom: 0;
   margin-bottom: var(--space);
 }
 
