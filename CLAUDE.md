@@ -436,6 +436,17 @@ application. The InDesign ones are demonstrated by
   shape gives the settings dialog a scrolling `.dlg-body` and a pinned
   `.dlg-footer` — and note that scrolling belongs to the body, not the
   `<dialog>`, or the footer scrolls away with everything else.
+- **A native file picker cannot be opened from an open modal, on macOS.** The
+  modal owns the application's modal loop, so `getFileForOpening` draws its
+  dialog and then ignores every click in it — the picker looks frozen and the
+  settings dialog behind it still has the focus. Nothing throws and nothing is
+  logged. So "Add font files…" does not pick: it records a reason and closes,
+  and `showSettings` opens the dialog in a **loop**, doing the picking between
+  iterations with nothing modal on screen. Two consequences worth keeping if
+  that loop is ever rewritten: whatever the picker has to say has to be carried
+  back and shown after the reopen, because there is nowhere to say it meanwhile;
+  and the compiler rebuild is started *unawaited* just after reopening, so
+  "Rebuilding the compiler…" lands in a status line that is visible.
 - **Getting the theme wrong is nearly silent.** `currentTheme()` matched
   `/dark|darkest|medium/` *case-sensitively* and fell back to `"light"` when the
   read threw, so a dark panel was served the light palette — and the symptom is

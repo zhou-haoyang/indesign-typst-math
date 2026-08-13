@@ -9,6 +9,10 @@
  *
  * Both dialogs are declared in index.html because showModal() throws on an
  * element that is not in the document, and neither is removed on close.
+ *
+ * The settings dialog is opened in a loop rather than once, because on macOS a
+ * modal owns the application's modal loop and the native file picker opened
+ * underneath it never receives a click — see the Add-fonts handler below.
  */
 const fonts = require("./fonts");
 const prefs = require("./prefs");
@@ -21,6 +25,24 @@ const el = {};
  * can be attached exactly once.
  */
 let deps = null;
+
+const PICK_FONTS = "pick-fonts";
+/**
+ * Why the settings dialog closed, set just before the close that means it.
+ * A module variable rather than close(value)/returnValue because what
+ * uxpShowModal resolves with is not something this host documents, and getting
+ * it wrong would silently end the loop in showSettings.
+ */
+let closeReason = null;
+
+const SETTINGS_OPTIONS = {
+  title: "Typst Math Settings",
+  resize: "both",
+  // Taller than before now that the extra height reaches the preamble editor
+  // instead of pooling under the Done row.
+  size: { width: 420, height: 520 },
+  minSize: { width: 300, height: 360 },
+};
 
 function bind() {
   if (el.bound) return;
@@ -119,15 +141,14 @@ function loadPrefs() {
 }
 
 function wire() {
-  el.addFonts.addEventListener("click", async () => {
-    try {
-      setDialogStatus("");
-      if (!await fonts.pick()) return;
-      renderFonts();
-      await applyFonts();
-    } catch (err) {
-      setDialogStatus(String((err && err.message) || err), "error");
-    }
+  // The picker cannot be opened from here. On macOS this modal owns the
+  // application's modal loop, so the file dialog comes up unresponsive: it
+  // draws, and every click goes to the settings dialog instead. So the button
+  // only closes the dialog with a reason, and showSettings does the picking
+  // with nothing modal on screen before reopening.
+  el.addFonts.addEventListener("click", () => {
+    closeReason = PICK_FONTS;
+    el.dialog.close();
   });
 
   el.clearFonts.addEventListener("click", async () => {
@@ -164,26 +185,68 @@ function configure(dependencies) {
   deps = dependencies;
 }
 
+/**
+ * Ask for font files with the dialog off screen, and carry the outcome back so
+ * the reopened dialog can report it. Nothing is said here: there is nowhere to
+ * say it, the panel's own status line being about the document.
+ * @returns {Promise<{added?: true, error?: string}|null>}
+ */
+async function pickFonts() {
+  // One turn of the host's event loop before the picker, so that closing the
+  // modal has finished landing rather than racing the file dialog.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  try {
+    return await fonts.pick() ? { added: true } : null;
+  } catch (err) {
+    return { error: String((err && err.message) || err) };
+  }
+}
+
+/**
+ * Losing the dialog means losing the only way to add a font, so this has to
+ * announce itself in the panel rather than look like a dead button.
+ */
+function reportOpenFailure(err) {
+  deps.onError(`Could not open the settings dialog: ${(err && err.message) || err}`);
+}
+
 async function showSettings() {
   bind();
-  renderFonts();
-  loadPrefs();
-  el.engine.textContent = deps.engine() || "";
-  setDialogStatus("");
+  // What the last trip round the loop left to be reported or acted on, once
+  // there is a dialog on screen to report it into.
+  let pending = null;
 
-  try {
-    await open(el.dialog, {
-      title: "Typst Math Settings",
-      resize: "both",
-      // Taller than before now that the extra height reaches the preamble
-      // editor instead of pooling under the Done row.
-      size: { width: 420, height: 520 },
-      minSize: { width: 300, height: 360 },
-    });
-  } catch (err) {
-    // Losing the dialog means losing the only way to add a font, so this has to
-    // announce itself in the panel rather than look like a dead button.
-    deps.onError(`Could not open the settings dialog: ${(err && err.message) || err}`);
+  for (;;) {
+    renderFonts();
+    loadPrefs();
+    el.engine.textContent = deps.engine() || "";
+    if (pending && pending.error) setDialogStatus(pending.error, "error");
+    else setDialogStatus("");
+
+    closeReason = null;
+    let closed;
+    try {
+      closed = open(el.dialog, SETTINGS_OPTIONS);
+    } catch (err) {
+      reportOpenFailure(err);
+      return;
+    }
+
+    // Deliberately not awaited: rebuilding the compiler takes seconds and has
+    // to run with the dialog on screen, or "Rebuilding the compiler…" arrives
+    // somewhere nobody is looking. It reports into the status line itself.
+    if (pending && pending.added) applyFonts();
+    pending = null;
+
+    try {
+      await closed;
+    } catch (err) {
+      reportOpenFailure(err);
+      return;
+    }
+
+    if (closeReason !== PICK_FONTS) return;
+    pending = await pickFonts();
   }
 }
 
