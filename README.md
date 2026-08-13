@@ -105,9 +105,17 @@ webview/     the compiler host and preview surface — real Chromium, so wasm an
              SVG work; also where the Typst source template lives
 src/backends/ the rendering-backend contract, and the Typst client
 src/id/      everything that touches the InDesign DOM
-src/ui/      panel controller, settings dialog, styles, fonts and preferences
+src/ui/      the panel: store, view, actions, settings dialog, styles
 tools/       headless checks (see below)
 ```
+
+The UI splits along what needs the host. `actions.js` never touches a control —
+it changes state and talks to InDesign or the compiler. `panel-view.js` never
+talks to either — it draws the state and calls an action when the user asks for
+something. Neither requires the other; `panel.js` joins them. The state itself
+is a small observable store, and the decisions worth asserting live in pure
+modules beside it (`status`, `spec`, `theme`, `selection`), which is what lets
+most of the UI be tested under bare node.
 
 Settings live in three scopes and three places: per equation on the frame's
 script label, per document on the document's label (the preamble), and per user
@@ -120,7 +128,10 @@ returns an `asset` plus `{width, height, depth}`, rather than assuming a PDF —
 MathJax, the likely next backend, produces SVG and no PDF at all.
 
 No bundler: the folder loads into UXP as-is. The panel is CommonJS, the webview
-is ESM.
+is ESM. `npm run setup` vendors what cannot be checked in — the typst.ts wasm,
+and the Spectrum theme colours, which are resolved from Adobe's token ramps to
+literal `rgb()` at build time so that UXP's CSS parser never sees a `var()`
+chain it might quietly drop.
 
 ### Checks
 
@@ -133,7 +144,15 @@ npm run test:app      # the real plugin code, in a live InDesign
 
 `npm test` is the one to run after any refactor: it includes a check that every
 relative `require` resolves, because UXP's module resolver is not Node's — it
-will not resolve a directory to its `index.js`.
+will not resolve a directory to its `index.js`. It also covers most of the
+panel, including the two rules that no amount of looking will reliably catch —
+that a focused editor is never rewritten underneath the person typing in it, and
+that a half-typed decimal in the size field survives the state round trip.
+
+What it cannot cover is anything about how the host actually behaves: whether
+UXP lays a rule out, whether a widget honours a property, whether the result is
+legible. Those need a reload, and `node tools/shoot-indesign.mjs` will
+photograph the result.
 
 `npm run test:app` is the interesting one. A UXP script shares the plugin's
 module system, so the test drives the actual `src/id/*` code inside a live
