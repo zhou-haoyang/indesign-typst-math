@@ -19,6 +19,11 @@ const {
 const { rerenderAll } = require("../id/rerender");
 const fonts = require("./fonts");
 const prefs = require("./prefs");
+const theme = require("./theme");
+const spec = require("./spec");
+const status = require("./status");
+const widgets = require("./widgets");
+const selection = require("./selection");
 const dialogs = require("./settings-dialog");
 
 const PREVIEW_DEBOUNCE_MS = 250;
@@ -68,9 +73,24 @@ function debounce(fn, ms) {
   };
 }
 
-/** How long a placement result resists being overwritten by routine updates. */
-const STICKY_MS = 15000;
-let stickyUntil = 0;
+/**
+ * What the status line currently says. The rules for what may replace what live
+ * in src/ui/status.js, where they can be asserted; this is the half that has to
+ * touch the DOM.
+ */
+let statusState = status.EMPTY;
+
+function applyStatus(next) {
+  // Identity, not equality: status.next hands back the same object when the
+  // request should be ignored, so this is also the "nothing to do" test.
+  if (next === statusState) return;
+  statusState = next;
+  el.status.textContent = next.text;
+  el.status.className = status.className(next);
+  // Mirrored to the console so it can be read and copied even after the panel
+  // moves on, and so it survives a status the panel is too narrow to show.
+  if (status.worthLogging(next)) console.log(`[typst] ${next.text}`);
+}
 
 /**
  * @param {{sticky?: boolean}} options  Placement results are sticky: inserting
@@ -78,16 +98,7 @@ let stickyUntil = 0;
  *   otherwise wipe the message a quarter of a second after it appears.
  */
 function setStatus(text, kind, options = {}) {
-  const now = Date.now();
-  const important = options.sticky || kind === "error";
-  // "Inserting…" and friends replace a sticky message but do not become one.
-  if (!important && kind !== "busy" && now < stickyUntil) return;
-  stickyUntil = important ? now + STICKY_MS : 0;
-  el.status.textContent = text || "";
-  el.status.className = `status${kind ? " " + kind : ""}`;
-  // Mirrored to the console so it can be read and copied even after the panel
-  // moves on, and so it survives a status the panel is too narrow to show.
-  if (text && important) console.log(`[typst] ${text}`);
+  applyStatus(status.next(statusState, { text, kind, sticky: options.sticky }, Date.now()));
 }
 
 /* ------------------------------------------------------------------ editor */
@@ -98,116 +109,58 @@ function setStatus(text, kind, options = {}) {
  * `sp-textarea`: the native Spectrum widget themes itself and draws its own
  * caret, at the price of being unstyleable inside. See panel.css.
  *
- * `placeholder` is set as an attribute rather than a property, because a custom
- * element's property does not necessarily reflect back to one.
+ * The read-back and the attribute-versus-property distinction now live in
+ * src/ui/widgets.js, which is the one place that knows what tag anything is.
  */
-function editorText() {
-  return el.editor.value || "";
-}
-
-function setEditorText(text) {
-  const value = text || "";
-  el.editor.value = value;
-  // The same rule this codebase applies to the InDesign DOM: an assignment can
-  // be refused without throwing, so read it back. sp-textarea also takes its
-  // value as content, and a silently ignored write here would look like
-  // selecting an equation failing to load its source.
-  if (editorText() !== value) el.editor.textContent = value;
-}
-
-function setEditorPlaceholder(text) {
-  el.editor.setAttribute("placeholder", text);
-}
-
-function describeDiagnostics(diagnostics) {
-  return (diagnostics || [])
-    .filter((d) => d.severity !== "info")
-    .map((d) => {
-      const where = d.where === "preamble" ? "preamble " : "";
-      const at = d.line != null ? `${where}${d.line}:${d.column || 1}: ` : (where ? where + ": " : "");
-      return `${at}${d.message}`;
-    })
-    .join("\n");
-}
+const editorText = () => widgets.value(el.editor);
+const setEditorText = (text) => widgets.setEditorValue(el.editor, text);
+const setEditorPlaceholder = (text) => widgets.setPlaceholder(el.editor, text);
 
 /* -------------------------------------------------------------------- spec */
 
 /**
- * The size and colour to render at, given the current selection and settings.
- * `auto` means: read it off the text the equation sits in.
+ * The typographic context at the insertion point, or null when there is none to
+ * read — which is a legitimate answer, not a failure.
+ *
+ * This is the half of the old `resolveTypography` that needs InDesign. What it
+ * *means* is in src/ui/spec.js, which is why that part can be tested.
  */
-function resolveTypography() {
-  const notes = [];
-  let size = state.sizePt;
-  let color = context.BLACK;
-
-  const wantsAuto = state.sizeMode === "auto" || state.colorMode === "auto";
-  if (wantsAuto) {
-    let at = null;
-    if (state.editing) {
-      const offset = context.anchorInsertionPoint(state.editing.frame);
-      if (offset) at = context.readAt(offset);
-    } else {
-      const target = context.currentTarget();
-      if (target.kind === "text") at = context.readAt(target.insertionPoint);
-    }
-    if (at) {
-      if (state.sizeMode === "auto" && at.size) size = at.size;
-      if (state.colorMode === "auto") color = at.color;
-      notes.push(...at.notes);
-    } else if (state.sizeMode === "auto" && !state.editing) {
-      // Nothing to match against; fall back rather than guess.
-      notes.push(`No text cursor; using ${size} pt.`);
-    }
+function readContext() {
+  if (state.editing) {
+    const offset = context.anchorInsertionPoint(state.editing.frame);
+    return offset ? context.readAt(offset) : null;
   }
-  state.contextNotes = notes;
-  return { size, color };
+  const target = context.currentTarget();
+  return target.kind === "text" ? context.readAt(target.insertionPoint) : null;
 }
 
 function currentSpec() {
-  const { size, color } = resolveTypography();
-  return {
-    body: state.body,
-    mode: state.mode,
-    size,
-    color,
-    preamble: state.preamble,
-  };
+  // Only read the document when something on screen actually asks for it.
+  const at = spec.wantsContext(state) ? readContext() : null;
+  const typography = spec.resolveTypography(state, at, context.BLACK);
+  state.contextNotes = typography.notes;
+  return spec.toSpec(state, typography);
 }
 
 /* ----------------------------------------------------------------- preview */
 
-/**
- * A note when the selected equation was built against a different preamble.
- *
- * This is what `record.preambleHash` is for: the artwork is a snapshot, so
- * after a preamble edit the placed equation and the preview legitimately
- * disagree until a re-render. Without saying so, that looks like a bug.
- */
-function staleNote() {
-  if (!state.editing) return "";
-  const stored = state.editing.record.preambleHash;
-  if (!stored || stored === label.hash(state.preamble)) return "";
-  return "Built with a different preamble — re-render to sync.";
-}
-
 const requestPreview = debounce(async () => {
-  const spec = currentSpec();
-  if (!spec.body.trim()) {
+  const request = currentSpec();
+  if (!request.body.trim()) {
     state.lastMetrics = null;
     el.insert.disabled = true;
     setStatus("");
-    await backend.render(spec, {});
+    await backend.render(request, {});
     return;
   }
   try {
-    const result = await backend.render(spec, {});
+    const result = await backend.render(request, {});
     state.lastMetrics = result.ok ? result.metrics : null;
     el.insert.disabled = !result.ok || state.busy;
     if (result.ok) {
       // Nothing routine to say: the webview shows the box size, and the notes
       // are the only things the reader did not ask for.
-      setStatus([...state.contextNotes, staleNote()].filter(Boolean).join(" "));
+      setStatus([...state.contextNotes, spec.staleNote(state.editing, state.preamble, label.hash)].filter(Boolean).join(" "));
     } else {
       // The preview box has already painted these: the render that returned
       // them drew them under the artwork that failed, since paint() runs before
@@ -215,7 +168,7 @@ const requestPreview = debounce(async () => {
       // one compiler error, in two slightly different formats. The status line
       // is cleared rather than left alone, so a note from the last render that
       // worked does not sit there reading as a description of this failure.
-      const text = describeDiagnostics(result.diagnostics);
+      const text = spec.describeDiagnostics(result.diagnostics);
       if (text) console.log(`[typst] ${text}`);
       setStatus("");
     }
@@ -259,12 +212,12 @@ function reportPlacement(note) {
   if (text) setStatus(text, warnings.length ? "error" : "", { sticky: true });
 }
 
-function buildRecord(spec, metrics) {
+function buildRecord(request, metrics) {
   return label.makeRecord({
-    body: spec.body,
-    mode: spec.mode,
-    size: { mode: state.sizeMode, pt: spec.size },
-    color: { mode: state.colorMode, space: spec.color.space, values: spec.color.values },
+    body: request.body,
+    mode: request.mode,
+    size: { mode: state.sizeMode, pt: request.size },
+    color: { mode: state.colorMode, space: request.color.space, values: request.color.values },
     preamble: state.preamble,
     metrics,
     engine: state.engine,
@@ -279,8 +232,8 @@ async function commit() {
   // to be selected a moment ago instead of inserting a new one.
   onSelectionChanged();
 
-  const spec = currentSpec();
-  if (!spec.body.trim()) return;
+  const request = currentSpec();
+  if (!request.body.trim()) return;
 
   let doc;
   try {
@@ -298,13 +251,13 @@ async function commit() {
 
   setBusy(true, state.editing ? "Updating…" : "Inserting…");
   try {
-    const result = await backend.render(spec, { pdf: true });
+    const result = await backend.render(request, { pdf: true });
     if (!result.ok || !result.asset) {
-      setStatus(describeDiagnostics(result.diagnostics) || "Could not render.", "error");
+      setStatus(spec.describeDiagnostics(result.diagnostics) || "Could not render.", "error");
       return;
     }
     state.lastMetrics = result.metrics;
-    const record = buildRecord(spec, result.metrics);
+    const record = buildRecord(request, result.metrics);
 
     if (state.editing && isUsable(state.editing.frame)) {
       await update({
@@ -326,7 +279,7 @@ async function commit() {
       // to report: it is anchored above the line, not on the baseline.
       const how = !anchored
         ? `on the page, not anchored: ${target.why || "unknown"}`
-        : spec.mode === "display"
+        : request.mode === "display"
           ? "above the line"
           : `inline, depth ${result.metrics.depth.toFixed(2)} pt, Y offset ${lastOffset()}`;
       console.log(`[typst] inserted ${how}`);
@@ -352,17 +305,20 @@ function setBusy(busy, message) {
   // Now that finishing is silent, whoever set "Inserting…" has to take it down
   // again or it stands there reading as a hang. Only a busy message is cleared:
   // an error raised in between is the thing we stayed quiet to make room for.
-  else if (!busy && el.status.className.includes("busy")) setStatus("");
+  // That used to be decided by asking the DOM whether its own class attribute
+  // contained the substring "busy"; it is now a property of the status itself.
+  else if (!busy) applyStatus(status.clearBusy(statusState));
 }
 
 /* --------------------------------------------------------------- selection */
 
 /** A cheap value that changes whenever the selection does. */
+function currentSelection() {
+  return tryGet(() => app.selection, []) || [];
+}
+
 function selectionSignature() {
-  const selection = tryGet(() => app.selection, []) || [];
-  if (!selection.length) return "none";
-  const first = selection[0];
-  return `${selection.length}:${tryGet(() => first.id, "")}:${tryGet(() => first.index, "")}`;
+  return selection.signatureOf(currentSelection());
 }
 
 let lastSignature = null;
@@ -372,32 +328,13 @@ function onSelectionChanged() {
   if (signature === lastSignature) return;
   lastSignature = signature;
 
-  const selection = tryGet(() => app.selection, []) || [];
-  let found = null;
-  for (const item of selection) {
-    const record = label.readRecord(item);
-    if (record) { found = { frame: item, record }; break; }
-
-    // Selecting the anchor character in the text is a natural way to reach for
-    // an inline equation, so look inside a *text* selection too. Deliberately
-    // not done for page items: selecting a whole text frame should not pick up
-    // whichever equation happens to live in it.
-    if (tryGet(() => item.geometricBounds, null) != null) continue;
-    const nested = tryGet(() => item.pageItems, null);
-    const count = nested ? tryGet(() => nested.length, 0) : 0;
-    for (let i = 0; i < count; i++) {
-      const inner = nested.item(i);
-      const innerRecord = label.readRecord(inner);
-      if (innerRecord) { found = { frame: inner, record: innerRecord }; break; }
-    }
-    if (found) break;
-  }
+  // The rule for what counts as "the selected equation" — and in particular
+  // that a selected text *frame* does not offer up whichever equation lives
+  // inside it — is in src/ui/selection.js, where it is asserted.
+  const found = selection.findEquation(currentSelection(), (item) => label.readRecord(item));
 
   if (found) {
-    // Compare by document id, not object identity: two reads of the same page
-    // item hand back different JS proxies.
-    const id = tryGet(() => found.frame.id, null);
-    if (state.editing && id != null && state.editing.id === id) return;
+    if (selection.isSameEquation(state.editing, found.frame)) return;
     loadRecord(found);
   } else if (state.editing) {
     state.editing = null;
@@ -411,18 +348,16 @@ function onSelectionChanged() {
 
 function loadRecord({ frame, record }) {
   state.editing = { frame, record, id: tryGet(() => frame.id, null) };
-  state.body = record.body || "";
+  // A partial patch on purpose: a record written by an older version may carry
+  // no size or colour, and absent has to mean "leave the toolbar alone" rather
+  // than "reset it". Applied before switchTab so the body it loads is this one.
+  Object.assign(state, spec.stateFromRecord(record));
   // Selecting an equation is a request to see its source, so come back from the
-  // preamble tab if that is where we were.
+  // preamble tab if that is where we were. switchTab does nothing when already
+  // here, which is why the editor is written explicitly afterwards.
   switchTab("equation");
   setEditorText(state.body);
-  state.mode = record.mode === "display" ? "display" : "inline";
   el.mode.value = state.mode;
-  if (record.size) {
-    state.sizeMode = record.size.mode === "fixed" ? "fixed" : "auto";
-    state.sizePt = record.size.pt || 10;
-  }
-  if (record.color) state.colorMode = record.color.mode === "auto" ? "auto" : "black";
   el.sizeMode.value = state.sizeMode;
   el.sizePt.value = state.sizePt;
   el.sizePt.disabled = state.sizeMode !== "fixed";
@@ -519,28 +454,23 @@ async function reloadFonts(announce) {
 
 /* -------------------------------------------------------------------- tabs */
 
-const PLACEHOLDER = {
-  equation: "Typst math, e.g.  sum_(i=1)^n x_i / 2",
-  preamble: "#let vb(x) = math.bold(x)\n#set text(font: \"New Computer Modern\")",
-};
-
 /**
  * The preamble is a tab rather than a drawer because it wants the live preview
  * below it exactly as much as the equation does — and for the same reason it is
  * not in the settings dialog, which would cover the preview entirely.
  *
  * The two tabs share one textarea, so switching means writing the visible text
- * back to the buffer it belongs to and loading the other.
+ * back to the buffer it belongs to and loading the other. Which buffer that is,
+ * and the round-trip guarantee, are src/ui/spec.js's business.
  */
 function switchTab(name) {
-  if (state.tab === name) return;
-  if (state.tab === "preamble") state.preamble = editorText();
-  else state.body = editorText();
+  const patch = spec.swapTab(state, name, editorText());
+  if (!patch) return;
+  Object.assign(state, patch);
 
-  state.tab = name;
   const preamble = name === "preamble";
-  setEditorText(preamble ? state.preamble : state.body);
-  setEditorPlaceholder(PLACEHOLDER[name]);
+  setEditorText(spec.visibleFor(state));
+  setEditorPlaceholder(spec.PLACEHOLDER[name]);
   el.preambleActions.classList.toggle("hidden", !preamble);
   el.tabEquation.classList.toggle("active", !preamble);
   el.tabPreamble.classList.toggle("active", preamble);
@@ -609,7 +539,7 @@ async function rerenderAllNow({ toDialog = false } = {}) {
       doc,
       preamble: state.preamble,
       engine: state.engine,
-      render: (spec, want) => backend.render(spec, want),
+      render: (request, want) => backend.render(request, want),
       onProgress: (i, n) => setStatus(`Re-rendering ${i + 1} of ${n}…`, "busy"),
     });
     const failed = summary.failures.length
@@ -661,34 +591,19 @@ function invokeMenu(id) {
 
 /* -------------------------------------------------------------------- boot */
 
-/**
- * Spectrum variants on the standard controls.
- *
- * UXP extends a plain `<button>` with `uxpVariant`/`uxpQuiet`/`uxpSelected`
- * rather than requiring `sp-button`, which is why these have looked native all
- * along — so this is the whole of what converting to Spectrum widgets would
- * have bought, without giving up the CSS that sizes the icon buttons. Set as
- * properties, since that is where they were found; the CSS fallbacks stay in
- * place in case a host does not honour them.
- */
-function setVariant(element, variant, quiet) {
-  if (!element) return;
-  try {
-    if (variant) element.uxpVariant = variant;
-    if (quiet) element.uxpQuiet = true;
-  } catch { /* the CSS fallback carries it */ }
-}
-
+/** Why these are properties on plain controls rather than sp-* tags: widgets.js. */
 function applyButtonVariants() {
-  setVariant(el.insert, "cta");
-  setVariant(el.revert, "secondary");
-  setVariant(el.settingsToggle, null, true);
-  setVariant(el.preambleSaveDefault, "secondary");
-  setVariant(el.preambleResetDefault, "secondary");
+  widgets.applyVariants(el, {
+    insert: ["cta"],
+    revert: ["secondary"],
+    settingsToggle: [null, true],
+    preambleSaveDefault: ["secondary"],
+    preambleResetDefault: ["secondary"],
+  });
 }
 
 function bindElements() {
-  for (const [key, id] of Object.entries({
+  widgets.bind(el, {
     editor: "editor", preview: "preview", status: "status", insert: "insert",
     revert: "revert", mode: "mode", sizeMode: "size-mode", sizePt: "size-pt",
     colorMode: "color-mode", settingsToggle: "settings-toggle",
@@ -697,9 +612,7 @@ function bindElements() {
     preambleHint: "preamble-hint",
     preambleSaveDefault: "preamble-save-default",
     preambleResetDefault: "preamble-reset-default",
-  })) {
-    el[key] = document.getElementById(id);
-  }
+  });
 }
 
 function wireEvents() {
@@ -788,48 +701,14 @@ function watchSelection() {
   if (usingEvents) setInterval(onSelectionChanged, SELECTION_POLL_MS * 3);
 }
 
-function hostTheme() {
-  return String(tryGet(() => require("uxp").host.theme, ""));
-}
-
-/**
- * Work the theme out from what the host actually painted, for when it will not
- * say. The panel chrome is a grey either way, so a luma midpoint decides it.
- * Returns null when the body is transparent, which tells us nothing.
- */
-function themeFromPaint() {
-  const bg = String(tryGet(() => getComputedStyle(document.body).backgroundColor, ""));
-  const parts = /rgba?\(\s*(\d+)\D+(\d+)\D+(\d+)(?:\D+([\d.]+))?/.exec(bg);
-  if (!parts) return null;
-  if (parts[4] !== undefined && Number(parts[4]) === 0) return null;
-  const luma = 0.299 * Number(parts[1]) + 0.587 * Number(parts[2]) + 0.114 * Number(parts[3]);
-  return luma < 128 ? "dark" : "light";
-}
-
-/**
- * InDesign reports one of lightest/light/medium/dark/darkest — but the match
- * here was case-sensitive and defaulted to "light" when the read threw, so a
- * dark panel was quietly served the light palette: light greys on light greys,
- * a white preview, and a white editor whatever the theme.
- */
-function currentTheme() {
-  const raw = hostTheme();
-  if (/dark|medium/i.test(raw)) return "dark";
-  if (/light/i.test(raw)) return "light";
-  return themeFromPaint() || "light";
-}
-
 async function start() {
   bindElements();
-  // Before anything is drawn: this picks the muted greys, and the panel is
-  // unreadable against the wrong chrome.
-  const theme = currentTheme();
-  document.body.classList.add(`theme-${theme}`);
-  // Worth a line because getting it wrong is nearly silent: it shows up as a
-  // panel that is merely hard to read rather than as an error, and it drove the
-  // preview and the panel's own greys apart for a long time without complaint.
-  console.log(`[typst] theme: "${hostTheme()}" → ${theme}` +
-    ` · painted ${tryGet(() => getComputedStyle(document.body).backgroundColor, "?")}`);
+  // Before anything is drawn: this picks every colour in the panel, and the
+  // wrong one against the host's chrome is merely hard to read rather than
+  // obviously broken. See src/ui/theme.js for why the host cannot be asked
+  // directly.
+  const resolved = theme.resolve();
+  theme.apply(resolved);
   applyButtonVariants();
   wireEvents();
   applyDefaults();
@@ -850,8 +729,11 @@ async function start() {
     state.engine = engine;
     state.wasmSource = wasmSource || "";
     // The same answer the panel styled itself with — the preview rendering
-    // light against a dark panel was the visible half of this being wrong.
-    backend.setTheme(theme);
+    // light against a dark panel was the visible half of this being wrong. And
+    // from here on the two stay together: the host's theme can change while the
+    // panel is open, and there is no event for it, so it is polled.
+    backend.setTheme(resolved);
+    theme.watch((next) => backend.setTheme(next));
     // Which wasm-loading strategy won is worth seeing — it varies with how UXP
     // resolves plugin: URLs, and it is the first thing to check if startup
     // breaks after a UXP update — but it is jargon in a status line, and the

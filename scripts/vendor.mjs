@@ -1,18 +1,22 @@
 #!/usr/bin/env node
 /**
- * Copies the typst.ts runtime out of node_modules into vendor/.
+ * Copies the typst.ts runtime out of node_modules into vendor/, and bakes the
+ * Spectrum theme colours the panel needs into a stylesheet beside it.
  *
  * The plugin folder has to be self-contained for UXP to load it, but the wasm
  * is ~30 MB and has no business in git. `npm install && npm run setup` puts it
  * in place; vendor/ is gitignored.
  */
+import { readFileSync } from "node:fs";
 import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildThemeCss } from "./spectrum-theme.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const modules = join(root, "node_modules", "@myriaddreamin");
 const vendor = join(root, "vendor");
+const tokens = join(root, "node_modules", "@spectrum-css", "tokens");
 
 const FILES = [
   ["typst.ts/dist/esm/contrib/all-in-one-lite.bundle.js", "typst-all-in-one-lite.js"],
@@ -58,6 +62,31 @@ for (const [, name] of FILES.filter(([from]) => from.endsWith(".wasm"))) {
   const { size } = await stat(out);
   total += size;
   console.log(`  ${(name + ".b64.js").padEnd(34)} ${mb(size).padStart(9)}`);
+}
+
+// Bake the six theme-dependent colours into literal rgb(), rather than shipping
+// the token stylesheet and asking UXP's parser to resolve var() chains it may
+// not support. scripts/spectrum-theme.mjs explains the version pin.
+{
+  let version = "unknown";
+  try {
+    version = JSON.parse(await readFile(join(tokens, "package.json"), "utf8")).version;
+  } catch {
+    console.error(`missing: ${tokens}\nRun \`npm install\` first.`);
+    process.exit(1);
+  }
+  const read = (path) => {
+    try {
+      return readFileSync(join(tokens, "dist", "css", path), "utf8");
+    } catch {
+      return null; // a layer this major does not ship; buildThemeCss decides if that matters
+    }
+  };
+  const name = "spectrum-theme.css";
+  await writeFile(join(vendor, name), buildThemeCss(read, { version }));
+  const { size } = await stat(join(vendor, name));
+  total += size;
+  console.log(`  ${name.padEnd(34)} ${mb(size).padStart(9)}`);
 }
 
 // Stamp the versions actually installed, so the panel can report them honestly

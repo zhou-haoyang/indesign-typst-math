@@ -14,6 +14,7 @@
   "devDependencies": {
     "@myriaddreamin/typst-ts-renderer": "0.7.0",
     "@myriaddreamin/typst-ts-web-compiler": "0.7.0",
-    "@myriaddreamin/typst.ts": "0.7.0"
+    "@myriaddreamin/typst.ts": "0.7.0",
+    "@spectrum-css/tokens": "15.2.0"
   }
 }

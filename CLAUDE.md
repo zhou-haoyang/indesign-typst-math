@@ -387,10 +387,26 @@ application. The InDesign ones are demonstrated by
   draw one it is the theme's text colour on the white background the control
   paints for itself on focus, so the element's own background and text have to
   be pinned per theme. Its `line-height` is irrelevant; that was a guess too.
-- **One muted grey does not serve both themes.** Nothing here reacts to
-  `prefers-color-scheme`; the panel reads `uxp.host.theme` and stamps
-  `theme-dark`/`theme-light` on `<body>`, and the greys hang off that. Anything
-  added to `:root` alone will be unreadable in one theme or the other.
+- **One muted grey does not serve both themes.** The panel resolves the host's
+  theme (see below) and stamps `spectrum--light`/`spectrum--dark` on `<body>`;
+  the `--ui-*` colours are declared under those classes in
+  `vendor/spectrum-theme.css`, generated at `npm run setup` from Adobe's own
+  token ramps. **Consume them at `body` or below, never at `:root`** — the class
+  is on `<body>` and `:root` is its *parent*, so a `:root` consumer silently
+  resolves every `var()` to its fallback and nothing tracks the theme.
+- **`gap` is not implemented, so all spacing comes from margins.** It computes
+  to `null` in this host, which is how a label and its hint once rendered as
+  "FontsAdded to the compiler…". There are no `gap` declarations left in
+  `panel.css` and none should be added: a rule that works in Chrome and
+  collapses in UXP is worse than no rule.
+- **`flex-basis: 0`, not `auto`, is what makes a proportional split hold.** The
+  editor and preview share the panel's leftover height 2:3 via `flex: 2 1 0` and
+  `flex: 3 1 0` inside `.workspace`; with `auto` the intrinsic content sizes
+  dominate and the ratio is ignored. Their container needs `min-height: 0` or
+  the `min-height: auto` flex-item rule stops either from shrinking. The same
+  shape gives the settings dialog a scrolling `.dlg-body` and a pinned
+  `.dlg-footer` — and note that scrolling belongs to the body, not the
+  `<dialog>`, or the footer scrolls away with everything else.
 - **Getting the theme wrong is nearly silent.** `currentTheme()` matched
   `/dark|darkest|medium/` *case-sensitively* and fell back to `"light"` when the
   read threw, so a dark panel was served the light palette — and the symptom is
@@ -401,6 +417,53 @@ application. The InDesign ones are demonstrated by
   (`getComputedStyle(document.body).backgroundColor`). The panel logs
   `[typst] theme: "<raw>" → <resolved>`; check it before believing any
   theme-dependent colour is at fault.
+- **`uxp.host.theme` is `undefined` in InDesign, and both fallbacks were dead
+  too.** Measured on 21.4.1.4: `require("uxp").host.theme` is `undefined`
+  (Adobe documents only `name`, `version`, `uiLocale` for ID), `require("uxp")
+  .versions` is `{}`, and **`matchMedia` does not exist at all**, so
+  `prefers-color-scheme` is not reachable either. `themeFromPaint()` cannot
+  cover for it, because `getComputedStyle` here is a *specified*-value API: it
+  returns an explicitly-set value correctly (`color: rgb(1,2,3)` reads back
+  `rgb(1,2,3)`) but hands back `"initial"` for anything merely inherited or
+  defaulted — so `document.body`'s `backgroundColor` is `"initial"` and the
+  luma regex never matches. Trace `currentTheme()` with those two facts and it
+  returns `"light"` unconditionally: **the panel served the light palette on a
+  dark host, always.** That is the real cause of "some elements don't follow the
+  theme", and it is invisible because each individual colour looks deliberate.
+  What does work is asking the application:
+  `require("indesign").app.generalPreferences.uiBrightnessPreference` — a number
+  in 0..1, readable both over the scripting bridge and from inside the panel.
+  **Its four presets are 0, 0.5, 0.51 and 1**, and the dark/light boundary falls
+  between the middle two, so the test is `<= 0.5` → dark. Calibrated by setting
+  each value and measuring the chrome: mean luma runs 0.61 · 0.67 · 0.86 · 0.95,
+  and the 0.5 → 0.51 step is where InDesign's own labels flip from white to
+  black. The property also *snaps* — writing 0.25 stores 0, writing 0.75 stores
+  0.51 — which is how the preset values were found. Do not treat it as a
+  continuous slider, and do not put the threshold at 0.75: 0.51 is a light
+  theme, and the gap either side of the boundary is one hundredth.
+- **Custom properties work in CSS but cannot be read back from JS.**
+  `getComputedStyle(el).getPropertyValue("--x")` returns `""` even for a
+  property a matching class demonstrably declares. `var()` substitution itself
+  is fine — a `.spectrum--dark` div containing elements styled
+  `background: var(--ui-accent)` paints correctly. So a theme value can be
+  *used*, never *verified*, from script; verify with `tools/shoot-indesign.mjs`.
+- **A plain element with no explicit colour renders black, whatever the theme.**
+  Nothing inherits a sensible default from the host chrome, so an unstyled
+  `<span>` is unreadable on a dark panel. Every plain text node needs a colour
+  from the token layer.
+- **The Spectrum typography widgets are real, and they refuse an inherited
+  colour.** `sp-body`, `sp-heading`, `sp-detail` and `sp-label` are all
+  implemented (as is `sp-divider`), and they paint themselves correctly for the
+  host theme even when the panel's own CSS is wrong — in the probe that caught
+  the bug above, they were the only white text on the dark panel. The catch:
+  setting `color` on an ancestor does nothing to them. A parent forced to
+  magenta turned a plain `<span>` magenta and left all four widgets white. **So
+  they cannot be muted, and a hint cannot be an `sp-body`** — muted secondary
+  text has to stay a plain element on a token colour. Their boxes also differ
+  from the panel's 11px: heading 29px tall, label 25, body 24, detail 16.
+  Measured with the prototype-vs-nonexistent-tag recipe below plus a
+  screenshot; `sp-textarea` and `sp-tabs` were carried along as controls and
+  both classified as expected.
 - **A flyout `menuItems` entry without an `id` takes the commands down with it.**
   Every item needs one, *including a separator* — `{label: "-"}` is rejected with
   "'id' should be defined in menuItem object". Because `entrypoints.setup` may

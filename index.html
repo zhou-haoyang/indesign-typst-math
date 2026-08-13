@@ -3,6 +3,11 @@
 
 <head>
   <meta charset="utf-8">
+  <!-- Spectrum's own ramps, resolved to literal colours at `npm run setup` and
+       keyed on .spectrum--light / .spectrum--dark, which src/ui/theme.js stamps
+       on the body element. Generated, gitignored; see scripts/spectrum-theme.mjs.
+       It must come first so panel.css can consume the --ui-* it declares. -->
+  <link rel="stylesheet" href="vendor/spectrum-theme.css">
   <link rel="stylesheet" href="src/ui/panel.css">
 </head>
 
@@ -13,14 +18,14 @@
     <div class="toolbar">
       <div class="controls">
         <label class="field">
-          <span>Style</span>
+          <sp-label>Style</sp-label>
           <select id="mode">
             <option value="inline">Inline</option>
             <option value="display">Display</option>
           </select>
         </label>
         <label class="field">
-          <span>Size</span>
+          <sp-label>Size</sp-label>
           <select id="size-mode">
             <option value="auto">Match text</option>
             <option value="fixed">Fixed</option>
@@ -28,7 +33,7 @@
         </label>
         <input type="number" id="size-pt" min="1" max="600" step="0.5" value="10" title="Point size" disabled>
         <label class="field">
-          <span>Colour</span>
+          <sp-label>Colour</sp-label>
           <select id="color-mode">
             <option value="auto">Match text</option>
             <option value="black">Black</option>
@@ -61,20 +66,26 @@
          styled — a monospace face for the Typst source is not available at any
          price. Reading and writing goes through the helpers in panel.js so that
          swapping the widget is one change. -->
-    <sp-textarea id="editor" placeholder="Typst math, e.g.  sum_(i=1)^n x_i / 2"></sp-textarea>
+    <!-- The editor and the preview share whatever height is left over, on a
+         fixed ratio. Before this box existed the editor was a hard 84px and the
+         preview took everything else, so making the panel taller only ever grew
+         the preview. -->
+    <div class="workspace">
+      <sp-textarea id="editor" placeholder="Typst math, e.g.  sum_(i=1)^n x_i / 2"></sp-textarea>
 
-    <div id="preamble-actions" class="row hidden">
-      <button id="preamble-save-default" title="Use this preamble for new documents">Save as default</button>
-      <button id="preamble-reset-default" title="Replace this document's preamble with your default">Reset to
-        default</button>
+      <div id="preamble-actions" class="row hidden">
+        <button id="preamble-save-default" title="Use this preamble for new documents">Save as default</button>
+        <button id="preamble-reset-default" title="Replace this document's preamble with your default">Reset to
+          default</button>
+      </div>
+      <span id="preamble-hint" class="hint"></span>
+
+      <!-- Local content must be addressed with the plugin: protocol; a relative
+           path silently loads nothing. Needs requiredPermissions.webview
+           .allowLocalRendering = "yes" (UXP 8+; InDesign 21.4 ships UXP 9.3). -->
+      <webview id="preview" src="plugin:/webview/index.html" height="100%" width="100%"
+        uxpAllowInspector="true"></webview>
     </div>
-    <span id="preamble-hint" class="hint"></span>
-
-    <!-- Local content must be addressed with the plugin: protocol; a relative
-         path silently loads nothing. Needs requiredPermissions.webview
-         .allowLocalRendering = "yes" (UXP 8+; InDesign 21.4 ships UXP 9.3). -->
-    <webview id="preview" src="plugin:/webview/index.html" height="100%" width="100%"
-      uxpAllowInspector="true"></webview>
 
     <!-- Its own full-width row: a compiler error runs to several lines and is
          unreadable squeezed beside the buttons. -->
@@ -94,10 +105,14 @@
        side by side ran them together into "FontsAdded to the compiler…" — UXP
        supports only part of flexbox, and a narrow dialog wants the stacked form
        anyway. -->
-  <dialog id="settings-dialog-2">
+  <dialog id="settings-dialog-3">
     <div class="dlg">
+      <!-- Everything above the footer scrolls; Done stays put. Without this the
+           dialog could be dragged taller and simply grew empty space under the
+           button, because .dlg stated a width and no height. -->
+      <div class="dlg-body">
       <div class="section">
-        <span class="section-title">Fonts</span>
+        <sp-detail class="section-title">Fonts</sp-detail>
         <span class="hint">Handed to the compiler alongside the Typst defaults. Changing them rebuilds it, which
           takes a few seconds.</span>
         <ul id="dlg-font-list" class="font-list"></ul>
@@ -107,25 +122,30 @@
         </div>
       </div>
 
-      <div class="section">
-        <span class="section-title">Default preamble</span>
+      <!-- The one section that takes the spare height: a code editor is the
+           thing you would want the room in, and the font list beside it looks
+           wrong holding a big empty gap when no fonts are installed. Its
+           min-height forces the body to scroll rather than being crushed when
+           the dialog is short. -->
+      <div class="section grows">
+        <sp-detail class="section-title">Default preamble</sp-detail>
         <span class="hint">Seeds any document that has none.</span>
         <sp-textarea id="dlg-default-preamble"
           placeholder="#let vb(x) = math.bold(x)"></sp-textarea>
       </div>
 
       <div class="section">
-        <span class="section-title">New equations start as</span>
+        <sp-detail class="section-title">New equations start as</sp-detail>
         <div class="row">
           <label class="field">
-            <span>Style</span>
+            <sp-label>Style</sp-label>
             <select id="dlg-mode">
               <option value="inline">Inline</option>
               <option value="display">Display</option>
             </select>
           </label>
           <label class="field">
-            <span>Colour</span>
+            <sp-label>Colour</sp-label>
             <select id="dlg-color-mode">
               <option value="auto">Match text</option>
               <option value="black">Black</option>
@@ -134,7 +154,7 @@
         </div>
         <div class="row">
           <label class="field">
-            <span>Size</span>
+            <sp-label>Size</sp-label>
             <select id="dlg-size-mode">
               <option value="auto">Match text</option>
               <option value="fixed">Fixed</option>
@@ -150,18 +170,21 @@
              the file picker and the compiler rebuild happen from here. -->
         <div id="dlg-status" class="status"></div>
       </div>
+      </div>
 
-      <div class="row">
+      <div class="row dlg-footer">
         <span class="spacer"></span>
         <button id="dlg-done" class="cta">Done</button>
       </div>
     </div>
   </dialog>
 
-  <dialog id="message-dialog">
+  <dialog id="message-dialog-2">
     <div class="dlg">
-      <div id="msg-text" class="status"></div>
-      <div class="row">
+      <div class="dlg-body">
+        <div id="msg-text" class="status"></div>
+      </div>
+      <div class="row dlg-footer">
         <span class="spacer"></span>
         <button id="msg-ok" class="cta">OK</button>
       </div>

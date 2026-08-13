@@ -12,6 +12,7 @@
  */
 const fonts = require("./fonts");
 const prefs = require("./prefs");
+const widgets = require("./widgets");
 
 const el = {};
 /**
@@ -23,34 +24,24 @@ let deps = null;
 
 function bind() {
   if (el.bound) return;
-  for (const [key, id] of Object.entries({
+  widgets.bind(el, {
     // The id carries the remembered geometry: UXP stores a dialog's size
     // against it, so a size change here does nothing until the id changes too.
-    dialog: "settings-dialog-2", fontList: "dlg-font-list", addFonts: "dlg-add-fonts",
+    // Both were bumped when the dialogs learned to fill vertically — which
+    // discards whatever size they had been dragged to, once.
+    dialog: "settings-dialog-3", fontList: "dlg-font-list", addFonts: "dlg-add-fonts",
     clearFonts: "dlg-clear-fonts", defaultPreamble: "dlg-default-preamble",
     mode: "dlg-mode", sizeMode: "dlg-size-mode", sizePt: "dlg-size-pt",
     colorMode: "dlg-color-mode", engine: "dlg-engine", status: "dlg-status",
     done: "dlg-done",
-    message: "message-dialog", messageText: "msg-text", messageOk: "msg-ok",
-  })) {
-    el[key] = document.getElementById(id);
-  }
+    message: "message-dialog-2", messageText: "msg-text", messageOk: "msg-ok",
+  });
   el.bound = true;
-  // UXP extends the standard controls with Spectrum variants, so no sp-button
-  // is needed to get them. See the note in panel.js.
-  setVariant(el.done, "cta");
-  setVariant(el.messageOk, "cta");
-  setVariant(el.addFonts, "secondary");
-  setVariant(el.clearFonts, "secondary");
+  widgets.applyVariants(el, {
+    done: ["cta"], messageOk: ["cta"],
+    addFonts: ["secondary"], clearFonts: ["secondary"],
+  });
   wire();
-}
-
-function setVariant(element, variant, quiet) {
-  if (!element) return;
-  try {
-    if (variant) element.uxpVariant = variant;
-    if (quiet) element.uxpQuiet = true;
-  } catch { /* the CSS fallback carries it */ }
 }
 
 /**
@@ -97,7 +88,7 @@ function renderFonts() {
     const remove = document.createElement("button");
     remove.textContent = "✕";
     remove.title = `Remove ${name}`;
-    setVariant(remove, null, true);
+    widgets.setVariant(remove, null, true);
     remove.addEventListener("click", async () => {
       fonts.remove(index);
       renderFonts();
@@ -113,12 +104,18 @@ function renderFonts() {
 
 function loadPrefs() {
   const current = prefs.read();
-  el.defaultPreamble.value = current.defaultPreamble;
-  el.mode.value = current.newEquation.mode;
-  el.sizeMode.value = current.newEquation.sizeMode;
-  el.sizePt.value = current.newEquation.sizePt;
-  el.sizePt.disabled = current.newEquation.sizeMode !== "fixed";
-  el.colorMode.value = current.newEquation.colorMode;
+  // Through widgets.setEditorValue, not `.value =`: this editor is an
+  // sp-textarea and takes its value as content too, so a silently refused write
+  // here used to be indistinguishable from an empty default preamble. The
+  // panel's editor has had that read-back for a long time; this one was
+  // reaching past it. Note the selects below use setValue, which has no
+  // textContent fallback — that would delete their options.
+  widgets.setEditorValue(el.defaultPreamble, current.defaultPreamble);
+  widgets.setValue(el.mode, current.newEquation.mode);
+  widgets.setValue(el.sizeMode, current.newEquation.sizeMode);
+  widgets.setValue(el.sizePt, current.newEquation.sizePt);
+  widgets.setDisabled(el.sizePt, current.newEquation.sizeMode !== "fixed");
+  widgets.setValue(el.colorMode, current.newEquation.colorMode);
 }
 
 function wire() {
@@ -178,8 +175,10 @@ async function showSettings() {
     await open(el.dialog, {
       title: "Typst Math Settings",
       resize: "both",
-      size: { width: 400, height: 480 },
-      minSize: { width: 300, height: 320 },
+      // Taller than before now that the extra height reaches the preamble
+      // editor instead of pooling under the Done row.
+      size: { width: 420, height: 520 },
+      minSize: { width: 300, height: 360 },
     });
   } catch (err) {
     // Losing the dialog means losing the only way to add a font, so this has to

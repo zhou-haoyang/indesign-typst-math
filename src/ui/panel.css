@@ -2,25 +2,33 @@
    properties and simple selectors, which are all reliable in InDesign 21. */
 
 :root {
-  --gap: 6px;
+  /* Named --space, not --gap: the CSS `gap` property does nothing in UXP, and
+     a variable named after it invites someone to reach for the real thing. */
+  --space: 6px;
   --pad: 8px;
-  --border: rgba(128, 128, 128, .45);
-  --muted: #8a8a8a;
-  --error: #d7373f;
-  --accent: #2680eb;
 }
 
-/* One muted grey cannot serve both themes: #8a8a8a on InDesign's dark chrome
-   left the field labels and the inactive tab barely legible. The panel already
-   reads uxp.host.theme for the webview, so it stamps the same answer here. */
-body.theme-dark {
-  --muted: #b6b6b6;
-  --border: rgba(190, 190, 190, .35);
-}
+/* Colours come from vendor/spectrum-theme.css, which declares --ui-* under
+   .spectrum--light / .spectrum--dark; src/ui/theme.js stamps one of those on
+   <body>. Three things about that are easy to get wrong:
 
-body.theme-light {
-  --muted: #5c5c5c;
-  --border: rgba(90, 90, 90, .35);
+   - Consume them at `body` or below, never at `:root`. The class is on <body>,
+     and :root is its *parent* — custom properties only inherit downwards, so a
+     :root consumer silently sees nothing.
+   - Keep a measured fallback in every var(). If a name is ever wrong the panel
+     degrades to the greys it shipped with rather than to no colour at all.
+   - A plain element with no explicit colour renders *black* here, whatever the
+     host theme; nothing sensible is inherited from the chrome. So every text
+     node needs one of these, which is the whole of the bug where half the panel
+     ignored the theme. */
+body {
+  --border: var(--ui-border, rgba(128, 128, 128, .45));
+  --muted: var(--ui-muted, #8a8a8a);
+  --error: var(--ui-error, #d7373f);
+  --accent: var(--ui-accent, #2680eb);
+  --radius: var(--ui-radius, 4px);
+  --text: var(--ui-text, inherit);
+  color: var(--text);
 }
 
 * {
@@ -41,13 +49,37 @@ body {
   padding: var(--pad);
 }
 
+/* Spacing comes from margins on the children, never `gap`.
+   `gap` is not in UXP's implemented CSS — it computes to nothing here, which is
+   how a label and its hint once rendered as "FontsAdded to the compiler…". A
+   rule that works in Chrome and silently collapses in the host is worse than no
+   rule, so the whole mechanism is avoided rather than used carefully. */
 .row,
 .statusbar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--gap);
   flex: 0 0 auto;
+}
+
+.row > *,
+.statusbar > *,
+.controls > *,
+.toolbar > * {
+  margin-right: var(--space);
+}
+
+.row > :last-child,
+.statusbar > :last-child,
+.controls > :last-child,
+.toolbar > :last-child {
+  margin-right: 0;
+}
+
+/* Wrapped rows need the vertical half too, or the second line touches the
+   first. Harmless on a row that does not wrap. */
+.controls > * {
+  margin-bottom: 2px;
 }
 
 /* The gear stays on the first row; only .controls wraps. Left to one flex row,
@@ -56,7 +88,6 @@ body {
 .toolbar {
   display: flex;
   align-items: flex-start;
-  gap: var(--gap);
   flex: 0 0 auto;
   padding-bottom: var(--pad);
 }
@@ -65,7 +96,6 @@ body {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--gap);
   flex: 1 1 auto;
   /* Lets the row shrink below its content width so that it wraps rather than
      pushing the gear along. */
@@ -83,11 +113,23 @@ body {
 .field {
   display: flex;
   align-items: center;
-  gap: 4px;
 }
 
-.field > span {
-  color: var(--muted);
+.field > sp-label {
+  margin-right: 4px;
+}
+
+/* The field labels are sp-label, and the section titles sp-detail, because the
+   host paints those itself and is therefore right in both themes without this
+   file having an opinion — in the probe that found the theme bug they were the
+   only readable text on the panel.
+
+   No colour rule here, and none is possible: these widgets ignore an inherited
+   colour outright. A parent forced to magenta turned a plain <span> magenta and
+   left every one of them white. That is also why a *hint* cannot be one of
+   them — muted secondary text has to stay a plain element on var(--muted). */
+.section-title {
+  display: block;
 }
 
 select {
@@ -142,7 +184,7 @@ select {
 }
 
 #preamble-actions {
-  margin-top: var(--gap);
+  margin-top: var(--space);
 }
 
 /* Both editors are sp-textarea, so the box is all that is set here.
@@ -160,26 +202,48 @@ select {
   width: 100%;
 }
 
+/* The editor and the preview split the panel's leftover height 2:3.
+   `flex-basis: 0` rather than `auto` is what makes the ratio hold at all — with
+   `auto` the intrinsic content sizes dominate and the proportions are ignored.
+   `min-height: 0` on the container is insurance against the `min-height: auto`
+   flex-item rule, which would stop either child from ever shrinking. */
+.workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 #editor {
+  flex: 2 1 0;
+  min-height: 60px;
+}
+
+#preamble-actions,
+#preamble-hint {
   flex: 0 0 auto;
-  height: 84px;
-  min-height: 48px;
 }
 
 #preview {
-  flex: 1 1 auto;
+  flex: 3 1 0;
   min-height: 90px;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius);
   margin-top: var(--pad);
 }
 
+/* Shrinkable, so a multi-line compile error yields to the workspace instead of
+   pushing the Insert button off the bottom of a short panel. */
 .status {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   width: 100%;
   margin-top: var(--pad);
   color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Only faces the host can resolve: UXP's parser drops the `monospace` generic
+     outright, and cannot resolve the Chromium/Apple keywords `ui-monospace` or
+     `SFMono-Regular`, so the old stack was already rendering as plain Menlo
+     with three dead entries in front of it. */
+  font-family: Menlo, Monaco, Consolas;
   font-size: 10px;
   line-height: 1.4;
   white-space: pre-wrap;
@@ -224,23 +288,46 @@ button.icon {
    per-user settings that need no live preview, and while they lived in a
    drawer inside the panel they competed with the webview for height. */
 
+/* The dialog fills the window the host gives it, in both axes.
+   It used to state a width and no height, so `resize: "both"` let it be dragged
+   taller and the extra height became empty space under the Done row — a window
+   that resized while nothing inside it moved. Scrolling now belongs to
+   .dlg-body, not to the dialog, so the footer can stay put. */
 dialog {
-  padding: var(--pad);
+  padding: 0;
   border: 1px solid var(--border);
-  border-radius: 4px;
-  /* Taller content scrolls rather than being cut off by whatever height the
-     host gives the dialog. */
-  overflow: auto;
+  border-radius: var(--radius);
+  overflow: hidden;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Without an explicit width this shrink-wraps its content and simply ignores
-   the dialog growing around it, which reads as a window that resizes while
-   nothing inside it moves. */
 .dlg {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   width: 100%;
   min-width: 260px;
+  padding: var(--pad);
+}
+
+/* Definite height (flex: 1 1 auto inside a definite-height .dlg) plus
+   min-height: 0 is what lets overflow and flex growth coexist here. Without the
+   min-height the body refuses to shrink below its content and scrolls nothing. */
+.dlg-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.dlg-footer {
+  flex: 0 0 auto;
+  padding-top: var(--pad);
 }
 
 /* Vertical rhythm from margins, not `gap`: a flex row with `gap` ran the label
@@ -248,14 +335,34 @@ dialog {
    holds this dialog together does not depend on the parts of flexbox UXP
    implements unevenly. */
 .section {
+  flex: 0 0 auto;
   margin-bottom: 14px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
 }
 
-.section-title {
-  display: block;
-  font-weight: bold;
+/* The one section that takes the slack. Tall dialog: this grows and the editor
+   inside it grows with it. Short dialog: its min-height pushes .dlg-body past
+   its own height and the body scrolls, with Done still pinned below.
+
+   The font list was tried as a second growing section and reverted: with no
+   fonts installed it held a large empty gap between the hint and the buttons,
+   which reads as a layout bug. A list that is usually short should take its
+   natural height and scroll past a cap; an editor is the thing worth the room.
+
+   `flex-basis: auto` (not 0, unlike the panel's workspace) because the heading
+   and hint above the editor are fixed content that must keep its height. */
+.section.grows {
+  flex: 1 1 auto;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+}
+
+.section.grows > #dlg-default-preamble {
+  flex: 1 1 auto;
+  min-height: 60px;
+  height: auto;
 }
 
 .section .hint {
@@ -264,7 +371,7 @@ dialog {
 }
 
 .section .row + .row {
-  margin-top: var(--gap);
+  margin-top: var(--space);
 }
 
 /* The last two sections are the read-only footer: no rule under them, and no
@@ -272,22 +379,23 @@ dialog {
 .section:last-of-type {
   border-bottom: none;
   padding-bottom: 0;
-  margin-bottom: var(--gap);
+  margin-bottom: var(--space);
 }
 
+/* Height comes from .section.grows above; this is only the floor for when the
+   dialog is too short for the flex share to matter. */
 #dlg-default-preamble {
-  height: 72px;
+  min-height: 60px;
 }
 
-#dlg-size-pt {
-  width: 58px;
-}
-
+/* Natural height up to a cap, then scrolls. Roomier than the old 76px because
+   the dialog now grows properly around it, so this is far less often the thing
+   doing the scrolling. */
 .font-list {
   list-style: none;
-  margin: 0 0 var(--gap) 0;
+  margin: 0 0 var(--space) 0;
   padding: 0;
-  max-height: 76px;
+  max-height: 120px;
   overflow: auto;
   color: var(--muted);
 }
@@ -295,9 +403,12 @@ dialog {
 .font-list li {
   display: flex;
   align-items: center;
-  gap: var(--gap);
   padding: 1px 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: Menlo, Monaco, Consolas;
+}
+
+.font-list li > span {
+  margin-right: var(--space);
 }
 
 .font-list li.empty {
