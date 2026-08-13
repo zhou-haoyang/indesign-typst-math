@@ -155,13 +155,16 @@ function paint(res, spec) {
   stage.textContent = "";
 
   if (!res.ok) {
+    // An `info` diagnostic — "Nothing to render." — is not a complaint about
+    // the source; it is the state of the stage, so it is drawn *as* the stage
+    // and taken off the status line. Printed in both places it read as two
+    // separate objections to one empty box.
+    const onStage = res.diagnostics.find((d) => d.severity === "info");
     const box = document.createElement("span");
     box.className = "placeholder";
-    box.textContent = res.diagnostics.some((d) => d.severity === "info")
-      ? res.diagnostics[0].message
-      : "—";
+    box.textContent = onStage ? onStage.message : "—";
     stage.appendChild(box);
-    showDiagnostics(res.diagnostics);
+    showDiagnostics(res.diagnostics.filter((d) => d !== onStage));
     return;
   }
 
@@ -204,13 +207,18 @@ function paint(res, spec) {
   statusEl.textContent = `${m.width.toFixed(2)} × ${m.height.toFixed(2)} pt`;
 }
 
+/**
+ * The status line, in order of what it is worth saying: whatever went wrong,
+ * else the size of what was drawn, else what engine is waiting to draw it.
+ * Never blank, and never a second copy of what the stage already says.
+ */
 function showDiagnostics(diagnostics) {
   const lines = (diagnostics || []).map((d) => {
     const where = d.line != null ? `${d.line}:${d.column ?? 0}: ` : "";
     return `${where}${d.severity === "warning" ? "warning: " : ""}${d.message}`;
   });
-  statusEl.className = diagnostics.some((d) => d.severity === "error") ? "error" : "";
-  statusEl.textContent = lines.join("\n");
+  statusEl.className = lines.length && diagnostics.some((d) => d.severity === "error") ? "error" : "";
+  statusEl.textContent = lines.length ? lines.join("\n") : engineLabel;
 }
 
 /* Re-fit on panel resize without recompiling. */

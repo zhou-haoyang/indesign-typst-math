@@ -90,6 +90,7 @@ try {
       hasSvg: !!svg,
       artHeight: art ? parseFloat(art.style.height) : null,
       guideTop: guide ? parseFloat(guide.style.top) : null,
+      placeholder: (doc.querySelector("#stage .placeholder") || {}).textContent || "",
       status: (doc.getElementById("status") || {}).textContent || "",
       statusIsError: !!(doc.getElementById("status") || {}).className?.includes("error"),
       bodyDark: doc.body.classList.contains("dark"),
@@ -148,9 +149,23 @@ for (const row of rows) {
       if (expected.spec.body.trim() && !p.statusIsError) {
         fail("preview status was not marked as an error");
       }
+      // The stage and the status line are two places to look, so neither may
+      // be blank and they may not say the same thing twice.
+      if (!p.status) fail("preview status line was left empty");
+      if (p.placeholder && p.status === p.placeholder) {
+        fail(`status line repeats what the stage says (${JSON.stringify(p.status)})`);
+      }
       const located = row.diagnostics.find((d) => d.line != null);
       if (expected.name === "syntax error" && !located) {
         fail("syntax error carried no line/column");
+      }
+      if (expected.name === "empty") {
+        // Nothing is wrong with an empty expression, so the line falls back to
+        // what it says at rest: which engine is waiting.
+        console.log(`   stage: ${JSON.stringify(p.placeholder)}, status: ${JSON.stringify(p.status)}`);
+        if (p.status !== ready.engine) {
+          fail(`empty expression should leave the engine on the status line, got ${JSON.stringify(p.status)}`);
+        }
       }
       if (expected.name === "preamble error" &&
           !row.diagnostics.some((d) => d.where === "preamble")) {

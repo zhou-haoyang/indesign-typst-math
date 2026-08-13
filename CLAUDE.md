@@ -159,6 +159,17 @@ quiet. It still reports a compile failure for the actions it owns
 for the `catch` around the render call, which is a bridge failure: there the
 webview never replied and has painted nothing.
 
+**The preview's own two lines must not agree with each other.** The stage and
+the status line beneath it are two places to look, so saying one thing in both
+is a wasted line — "Nothing to render." in the middle of the empty stage and
+again underneath it read as two objections to one empty box. An `info`
+diagnostic *is* the state of the stage, so `paint()` draws it there and hands
+`showDiagnostics` the rest. What is left decides the line: the diagnostics if
+there are any, otherwise the size of what was drawn, otherwise the engine
+string it shows at rest. It is never blank: `tools/smoke-preview.mjs` checks
+that of every failing case, along with the two lines differing, and pins the
+fallback on the empty one.
+
 **An operation that succeeded says nothing.** The equation appearing in the
 document is the feedback, and a panel that announces every success trains
 people to ignore the line the failures also arrive on. So the status line
