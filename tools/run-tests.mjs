@@ -29,6 +29,7 @@ const SUITES = {
       ["baseline solver", "node", ["tools/test-baseline-offset.mjs"]],
       ["settings storage", "node", ["tools/test-prefs.mjs"]],
       ["selection search", "node", ["tools/test-selection.mjs"]],
+      ["panel view", "node", ["tools/test-view.mjs"]],
       ["state and status", "node", ["tools/test-store.mjs"]],
       ["render spec", "node", ["tools/test-spec.mjs"]],
       ["spectrum tokens", "node", ["tools/test-tokens.mjs"]],
