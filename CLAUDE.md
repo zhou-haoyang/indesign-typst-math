@@ -92,12 +92,21 @@ It also exercises the document preamble through the real DOM, which is the one
 thing a mock cannot prove: `extractLabel` returns `""` both for a key that was
 never set and for one holding an empty preamble.
 
-Not covered: `src/ui/panel.js` and `src/ui/settings-dialog.js` (the controller
-and the modal), which still need a human reloading the plugin — though
-`src/ui/prefs.js` and the preamble envelope are covered headless by
-`tools/test-prefs.mjs`, which stubs `localStorage` and the `indesign` module.
-Everything under `webview/` is covered by the browser suite, being plain browser
-code.
+The UI splits along what needs the host. `store`, `status`, `spec`, `theme`,
+`selection` and the Spectrum token extractor are covered headless in the unit
+suite (`tools/test-store.mjs`, `test-spec.mjs`, `test-theme.mjs`,
+`test-selection.mjs`, `test-tokens.mjs`), as are `prefs` and the preamble
+envelope (`test-prefs.mjs`) — all of them by stubbing `indesign`, `uxp` and
+`localStorage` before the module under test loads, the way `test-prefs.mjs`
+does. Everything under `webview/` is covered by the browser suite, being plain
+browser code.
+
+Not covered: `panel-view.js`, `actions.js` and `settings-dialog.js`, which need
+a human reloading the plugin. Their *logic* has mostly been lifted into the pure
+modules above; what is left is DOM wiring and orchestration. When changing them,
+the checks worth doing by hand are the ones no test can reach — type in the
+editor and watch the caret, type a decimal into the size field, switch tabs,
+select an equation, insert and watch the status line persist.
 
 ### Looking at the panel without InDesign
 
@@ -165,14 +174,23 @@ leaves "Inserting…" on screen reading as a hang.
 
 ```
 index.html + main.js   panel shell, entrypoints, flyout menu
-src/ui/panel.js        controller: editor, live preview, insert/update, tabs
+src/ui/panel.js        composition root: build store, actions and view, start
+src/ui/panel-view.js   the panel's DOM: bind, wire, render from the store
+src/ui/actions.js      preview, insert/update, selection, preamble, fonts
+src/ui/store.js        the state, and who to tell when it changes
+src/ui/status.js       what the status line is allowed to say  (pure)
+src/ui/spec.js         panel state <-> render request, tab buffers  (pure)
+src/ui/selection.js    finding the selected equation
+src/ui/theme.js        which palette to paint in, and keeping it current
+src/ui/widgets.js      the only module that knows what tag a control is
 src/ui/settings-dialog.js  the modal: fonts, defaults, engine info
 src/ui/prefs.js        per-user settings in localStorage
 src/ui/fonts.js        per-user extra font files
 src/backends/          rendering-backend contract + the Typst client
 src/id/                everything touching the InDesign DOM
 webview/               the wasm compiler host, and the preview surface
-scripts/vendor.mjs     copies typst.ts out of node_modules into vendor/
+scripts/vendor.mjs     vendors typst.ts, and bakes the Spectrum theme colours
+scripts/spectrum-theme.mjs  resolves Spectrum tokens to literal rgb()
 ```
 
 No bundler; the folder loads into UXP as-is. **Panel code is CommonJS, webview

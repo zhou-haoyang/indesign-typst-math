@@ -1,43 +1,31 @@
 /**
- * Panel controller: editor, live preview, insert/update, settings.
+ * Panel composition root: build the store, the actions and the view, and start.
+ *
+ * The three fit together one way only. `actions` never touches a control — it
+ * changes state and talks to InDesign or the compiler. `panel-view` never talks
+ * to either — it draws the state and calls an action when the user asks for
+ * something. Neither requires the other; this file is what joins them, which is
+ * why the dependency stays one-way and why each can be read on its own.
  *
  * The <webview> in the middle of the panel is doing double duty — it hosts the
- * wasm compiler *and* is the preview surface, so a "render" both returns
- * metrics here and paints there.
+ * wasm compiler *and* is the preview surface, so a "render" both returns metrics
+ * to the panel and paints there.
  */
-const { app } = require("indesign");
-
-// Explicit file path: UXP's require does not resolve a directory to its
-// index.js, only Node does.
 const backend = require("../backends/index").get("typst");
-const { tryGet, isUsable, activeDocument, asOneUndo } = require("../id/doc");
-const label = require("../id/label");
-const context = require("../id/context");
-const {
-  insert, update, lastPlacementWarnings, lastFrameChrome, lastOffset,
-} = require("../id/insert");
-const { rerenderAll } = require("../id/rerender");
-const fonts = require("./fonts");
-const prefs = require("./prefs");
-const theme = require("./theme");
-const spec = require("./spec");
+const { createStore } = require("./store");
 const status = require("./status");
-const widgets = require("./widgets");
-const selection = require("./selection");
+const theme = require("./theme");
+const actionsModule = require("./actions");
+const viewModule = require("./panel-view");
 const dialogs = require("./settings-dialog");
 
-const PREVIEW_DEBOUNCE_MS = 250;
-const SELECTION_POLL_MS = 700;
-/** How long a menu command waits for a compiler that is still starting. */
-const COMPILER_GRACE_MS = 3000;
-
-const state = {
+const store = createStore({
   engine: "",
   wasmSource: "",
   /**
-   * Which buffer `el.editor` is currently showing. One textarea serves both
-   * tabs: two of them, with the inactive one hidden, left the preamble
-   * permanently unfocusable.
+   * Which buffer the editor is currently showing. One control serves both tabs:
+   * two of them, with the inactive one hidden, left the preamble permanently
+   * unfocusable.
    */
   tab: "equation",
   body: "",
@@ -57,525 +45,15 @@ const state = {
   editing: null,
   /** Metrics from the most recent successful preview. */
   lastMetrics: null,
-  contextNotes: [],
   busy: false,
-};
+  /** What the status line says. The rules live in src/ui/status.js. */
+  status: status.EMPTY,
+});
 
-const el = {};
+// Before the view, so its state mirror is in place when the first render runs.
+const actions = actionsModule.create(store);
 
-/* ------------------------------------------------------------------- utils */
-
-function debounce(fn, ms) {
-  let timer = null;
-  return (...args) => {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn(...args), ms);
-  };
-}
-
-/**
- * What the status line currently says. The rules for what may replace what live
- * in src/ui/status.js, where they can be asserted; this is the half that has to
- * touch the DOM.
- */
-let statusState = status.EMPTY;
-
-function applyStatus(next) {
-  // Identity, not equality: status.next hands back the same object when the
-  // request should be ignored, so this is also the "nothing to do" test.
-  if (next === statusState) return;
-  statusState = next;
-  el.status.textContent = next.text;
-  el.status.className = status.className(next);
-  // Mirrored to the console so it can be read and copied even after the panel
-  // moves on, and so it survives a status the panel is too narrow to show.
-  if (status.worthLogging(next)) console.log(`[typst] ${next.text}`);
-}
-
-/**
- * @param {{sticky?: boolean}} options  Placement results are sticky: inserting
- *   selects the new frame, which triggers a preview, whose success path would
- *   otherwise wipe the message a quarter of a second after it appears.
- */
-function setStatus(text, kind, options = {}) {
-  applyStatus(status.next(statusState, { text, kind, sticky: options.sticky }, Date.now()));
-}
-
-/* ------------------------------------------------------------------ editor */
-
-/**
- * Everything that touches the editor widget goes through these three, so that
- * swapping it costs them plus the one tag in index.html. It is an
- * `sp-textarea`: the native Spectrum widget themes itself and draws its own
- * caret, at the price of being unstyleable inside. See panel.css.
- *
- * The read-back and the attribute-versus-property distinction now live in
- * src/ui/widgets.js, which is the one place that knows what tag anything is.
- */
-const editorText = () => widgets.value(el.editor);
-const setEditorText = (text) => widgets.setEditorValue(el.editor, text);
-const setEditorPlaceholder = (text) => widgets.setPlaceholder(el.editor, text);
-
-/* -------------------------------------------------------------------- spec */
-
-/**
- * The typographic context at the insertion point, or null when there is none to
- * read — which is a legitimate answer, not a failure.
- *
- * This is the half of the old `resolveTypography` that needs InDesign. What it
- * *means* is in src/ui/spec.js, which is why that part can be tested.
- */
-function readContext() {
-  if (state.editing) {
-    const offset = context.anchorInsertionPoint(state.editing.frame);
-    return offset ? context.readAt(offset) : null;
-  }
-  const target = context.currentTarget();
-  return target.kind === "text" ? context.readAt(target.insertionPoint) : null;
-}
-
-function currentSpec() {
-  // Only read the document when something on screen actually asks for it.
-  const at = spec.wantsContext(state) ? readContext() : null;
-  const typography = spec.resolveTypography(state, at, context.BLACK);
-  state.contextNotes = typography.notes;
-  return spec.toSpec(state, typography);
-}
-
-/* ----------------------------------------------------------------- preview */
-
-const requestPreview = debounce(async () => {
-  const request = currentSpec();
-  if (!request.body.trim()) {
-    state.lastMetrics = null;
-    el.insert.disabled = true;
-    setStatus("");
-    await backend.render(request, {});
-    return;
-  }
-  try {
-    const result = await backend.render(request, {});
-    state.lastMetrics = result.ok ? result.metrics : null;
-    el.insert.disabled = !result.ok || state.busy;
-    if (result.ok) {
-      // Nothing routine to say: the webview shows the box size, and the notes
-      // are the only things the reader did not ask for.
-      setStatus([...state.contextNotes, spec.staleNote(state.editing, state.preamble, label.hash)].filter(Boolean).join(" "));
-    } else {
-      // The preview box has already painted these: the render that returned
-      // them drew them under the artwork that failed, since paint() runs before
-      // send() on the same object. Saying it again here stacked two copies of
-      // one compiler error, in two slightly different formats. The status line
-      // is cleared rather than left alone, so a note from the last render that
-      // worked does not sit there reading as a description of this failure.
-      const text = spec.describeDiagnostics(result.diagnostics);
-      if (text) console.log(`[typst] ${text}`);
-      setStatus("");
-    }
-  } catch (err) {
-    // Not the same thing: here the webview never answered, so it has painted
-    // nothing and this is the only place the failure can appear.
-    state.lastMetrics = null;
-    el.insert.disabled = true;
-    setStatus(String((err && err.message) || err), "error");
-  }
-}, PREVIEW_DEBOUNCE_MS);
-
-/* ------------------------------------------------------------ insert/update */
-
-/**
- * Report a placement, which means saying nothing when it worked: the equation
- * appearing in the document is the feedback, and a line of praise for every
- * insert is one more thing to read and dismiss.
- *
- * What is left is what went wrong. Frame formatting can be refused without
- * throwing, and silently leaving a stroke around every equation is the kind of
- * thing that should announce itself — it draws a box, and its weight shifts the
- * equation off the baseline by half of it.
- *
- * @param {string} note Something worth saying even though nothing failed, i.e.
- *   that the equation did not go where it was probably meant to.
- */
-function reportPlacement(note) {
-  const warnings = lastPlacementWarnings();
-  if (warnings.length) {
-    // Which object refused what, and what the frame reads back as, is what
-    // fixes this — the frame, the graphic inside it and the applied style can
-    // each draw a box — and it is a wall of property names to anyone else.
-    console.log(`[typst] could not clear: ${warnings.join("; ")}`);
-    console.log(`[typst] frame reads back as: ${lastFrameChrome()}`);
-  }
-  const text = [note, warnings.length
-    ? "Some of the frame's formatting could not be cleared, " +
-      "so it may show a box or sit slightly off the baseline."
-    : ""].filter(Boolean).join("\n");
-  if (text) setStatus(text, warnings.length ? "error" : "", { sticky: true });
-}
-
-function buildRecord(request, metrics) {
-  return label.makeRecord({
-    body: request.body,
-    mode: request.mode,
-    size: { mode: state.sizeMode, pt: request.size },
-    color: { mode: state.colorMode, space: request.color.space, values: request.color.values },
-    preamble: state.preamble,
-    metrics,
-    engine: state.engine,
-  });
-}
-
-async function commit() {
-  if (state.busy) return;
-  // The selection watcher is polled, so it can lag a click into the text by up
-  // to its interval. Re-read now: otherwise clicking into a paragraph and
-  // immediately pressing Cmd+Enter would overwrite the equation that happened
-  // to be selected a moment ago instead of inserting a new one.
-  onSelectionChanged();
-
-  const request = currentSpec();
-  if (!request.body.trim()) return;
-
-  let doc;
-  try {
-    doc = activeDocument();
-  } catch (err) {
-    setStatus(err.message, "error");
-    return;
-  }
-
-  // A preamble that is still only the user's default becomes this document's
-  // now, so that the document that holds the equation also holds what built it.
-  // Its own undo step, deliberately: undoing the insert should not silently
-  // strip a document-wide setting.
-  if (state.preambleFromDefault) persistPreamble();
-
-  setBusy(true, state.editing ? "Updating…" : "Inserting…");
-  try {
-    const result = await backend.render(request, { pdf: true });
-    if (!result.ok || !result.asset) {
-      setStatus(spec.describeDiagnostics(result.diagnostics) || "Could not render.", "error");
-      return;
-    }
-    state.lastMetrics = result.metrics;
-    const record = buildRecord(request, result.metrics);
-
-    if (state.editing && isUsable(state.editing.frame)) {
-      await update({
-        doc, frame: state.editing.frame,
-        asset: result.asset, metrics: result.metrics, record,
-      });
-      state.editing.record = record;
-      reportPlacement("");
-    } else {
-      const target = context.currentTarget();
-      const { frame, anchored } = await insert({
-        doc, asset: result.asset, metrics: result.metrics, record, target,
-      });
-      state.editing = { frame, record, id: tryGet(() => frame.id, null) };
-      lastSignature = selectionSignature();
-      // The depth, the offset that was applied and what it was solved against
-      // are how an alignment bug is diagnosed and are meaningless to read
-      // otherwise, so they go to the console. A display equation has no offset
-      // to report: it is anchored above the line, not on the baseline.
-      const how = !anchored
-        ? `on the page, not anchored: ${target.why || "unknown"}`
-        : request.mode === "display"
-          ? "above the line"
-          : `inline, depth ${result.metrics.depth.toFixed(2)} pt, Y offset ${lastOffset()}`;
-      console.log(`[typst] inserted ${how}`);
-      // Landing on the page is not a failure, but it is not what someone
-      // reaching for an inline equation asked for, so it is the one placement
-      // outcome still worth a line.
-      reportPlacement(anchored
-        ? ""
-        : "Inserted on the page. To place one inline, put the text cursor in the text first.");
-      syncEditingUI();
-    }
-  } catch (err) {
-    setStatus(String((err && err.message) || err), "error");
-  } finally {
-    setBusy(false);
-  }
-}
-
-function setBusy(busy, message) {
-  state.busy = busy;
-  el.insert.disabled = busy || !state.lastMetrics;
-  if (busy && message) setStatus(message, "busy");
-  // Now that finishing is silent, whoever set "Inserting…" has to take it down
-  // again or it stands there reading as a hang. Only a busy message is cleared:
-  // an error raised in between is the thing we stayed quiet to make room for.
-  // That used to be decided by asking the DOM whether its own class attribute
-  // contained the substring "busy"; it is now a property of the status itself.
-  else if (!busy) applyStatus(status.clearBusy(statusState));
-}
-
-/* --------------------------------------------------------------- selection */
-
-/** A cheap value that changes whenever the selection does. */
-function currentSelection() {
-  return tryGet(() => app.selection, []) || [];
-}
-
-function selectionSignature() {
-  return selection.signatureOf(currentSelection());
-}
-
-let lastSignature = null;
-
-function onSelectionChanged() {
-  const signature = selectionSignature();
-  if (signature === lastSignature) return;
-  lastSignature = signature;
-
-  // The rule for what counts as "the selected equation" — and in particular
-  // that a selected text *frame* does not offer up whichever equation lives
-  // inside it — is in src/ui/selection.js, where it is asserted.
-  const found = selection.findEquation(currentSelection(), (item) => label.readRecord(item));
-
-  if (found) {
-    if (selection.isSameEquation(state.editing, found.frame)) return;
-    loadRecord(found);
-  } else if (state.editing) {
-    state.editing = null;
-    syncEditingUI();
-    requestPreview();
-  } else {
-    // Typography may still have changed (different paragraph, different size).
-    requestPreview();
-  }
-}
-
-function loadRecord({ frame, record }) {
-  state.editing = { frame, record, id: tryGet(() => frame.id, null) };
-  // A partial patch on purpose: a record written by an older version may carry
-  // no size or colour, and absent has to mean "leave the toolbar alone" rather
-  // than "reset it". Applied before switchTab so the body it loads is this one.
-  Object.assign(state, spec.stateFromRecord(record));
-  // Selecting an equation is a request to see its source, so come back from the
-  // preamble tab if that is where we were. switchTab does nothing when already
-  // here, which is why the editor is written explicitly afterwards.
-  switchTab("equation");
-  setEditorText(state.body);
-  el.mode.value = state.mode;
-  el.sizeMode.value = state.sizeMode;
-  el.sizePt.value = state.sizePt;
-  el.sizePt.disabled = state.sizeMode !== "fixed";
-  el.colorMode.value = state.colorMode;
-  syncEditingUI();
-  requestPreview();
-}
-
-function syncEditingUI() {
-  const editing = !!state.editing;
-  el.insert.textContent = editing ? "Update" : "Insert";
-  el.revert.classList.toggle("hidden", !editing);
-}
-
-/* ---------------------------------------------------------------- preamble */
-
-/**
- * Read the active document's preamble, seeding from the user's default when the
- * document has never had one.
- *
- * The seed is in memory only. Writing it here would dirty every document merely
- * by opening it, and `readDocumentPreamble` reports `present` precisely so that
- * a preamble someone deliberately emptied is not re-seeded on every reload.
- */
-function loadDocumentPreamble() {
-  const doc = tryGet(() => app.activeDocument, null);
-  if (!isUsable(doc)) {
-    state.preambleDoc = null;
-    return;
-  }
-  const id = tryGet(() => doc.id, null);
-  if (id === state.preambleDoc) return;
-  state.preambleDoc = id;
-
-  const stored = label.readDocumentPreamble(doc);
-  const fallback = prefs.read().defaultPreamble;
-  const before = state.preamble;
-  state.preambleFromDefault = !stored.present && !!fallback;
-  state.preamble = stored.present ? stored.text : (fallback || "");
-  showInEditor("preamble", state.preamble);
-  syncPreambleUI();
-  // Switching documents can change what the same expression compiles to, and
-  // the selection watcher will not notice if the selection looks the same in
-  // both documents.
-  if (state.preamble !== before) requestPreview();
-}
-
-function syncPreambleUI() {
-  el.preambleDot.classList.toggle("hidden", !state.preamble.trim());
-  el.preambleHint.textContent = state.tab === "preamble" && state.preambleFromDefault
-    ? "From your default — saved into this document when you insert an equation."
-    : "";
-}
-
-function persistPreamble() {
-  const doc = tryGet(() => app.activeDocument, null);
-  if (!isUsable(doc)) return;
-  try {
-    asOneUndo("Set Typst preamble", () => label.writeDocumentPreamble(doc, state.preamble));
-    state.preambleFromDefault = false;
-    syncPreambleUI();
-  } catch (err) {
-    setStatus(String((err && err.message) || err), "error");
-  }
-}
-
-const savePreamble = debounce(persistPreamble, 600);
-
-/* ------------------------------------------------------------------- fonts */
-
-async function reloadFonts(announce) {
-  const { fonts: data, names, dropped } = await fonts.load();
-  if (data.length || announce) {
-    setBusy(true, "Loading fonts…");
-    try {
-      await backend.setFonts(data);
-      console.log(`[typst] ${names.length} font file(s) loaded` +
-        `${dropped.length ? `, ${dropped.length} missing` : ""}`);
-      // A font whose file has moved is the only half of this worth saying: it
-      // has just been dropped from the list, and the maths it was setting will
-      // quietly come back in a different face.
-      if (dropped.length) {
-        setStatus(`Could not read ${dropped.join(", ")} — removed from the list.`, "error");
-      }
-    } catch (err) {
-      setStatus(String((err && err.message) || err), "error");
-      throw err;
-    } finally {
-      setBusy(false);
-    }
-  }
-  requestPreview();
-}
-
-/* -------------------------------------------------------------------- tabs */
-
-/**
- * The preamble is a tab rather than a drawer because it wants the live preview
- * below it exactly as much as the equation does — and for the same reason it is
- * not in the settings dialog, which would cover the preview entirely.
- *
- * The two tabs share one textarea, so switching means writing the visible text
- * back to the buffer it belongs to and loading the other. Which buffer that is,
- * and the round-trip guarantee, are src/ui/spec.js's business.
- */
-function switchTab(name) {
-  const patch = spec.swapTab(state, name, editorText());
-  if (!patch) return;
-  Object.assign(state, patch);
-
-  const preamble = name === "preamble";
-  setEditorText(spec.visibleFor(state));
-  setEditorPlaceholder(spec.PLACEHOLDER[name]);
-  el.preambleActions.classList.toggle("hidden", !preamble);
-  el.tabEquation.classList.toggle("active", !preamble);
-  el.tabPreamble.classList.toggle("active", preamble);
-  syncPreambleUI();
-  el.editor.focus();
-}
-
-/** Show `text` in the editor when the tab it belongs to is the visible one. */
-function showInEditor(tab, text) {
-  if (state.tab === tab) setEditorText(text);
-}
-
-/* ---------------------------------------------------------------- defaults */
-
-/** Put the user's remembered defaults into the toolbar. */
-function applyDefaults(stored) {
-  const wanted = (stored || prefs.read()).newEquation;
-  state.mode = wanted.mode;
-  state.sizeMode = wanted.sizeMode;
-  state.sizePt = wanted.sizePt;
-  state.colorMode = wanted.colorMode;
-  el.mode.value = state.mode;
-  el.sizeMode.value = state.sizeMode;
-  el.sizePt.value = state.sizePt;
-  el.sizePt.disabled = state.sizeMode !== "fixed";
-  el.colorMode.value = state.colorMode;
-}
-
-/* ------------------------------------------------------------ menu actions */
-
-/**
- * Wait for the compiler if it is still starting, but do not hang on one that
- * will never arrive — a command can be invoked with the panel never opened, and
- * the compiler lives inside the panel's webview.
- */
-async function ensureCompiler() {
-  if (backend.isReady()) return true;
-  const grace = new Promise((resolve) => setTimeout(() => resolve(false), COMPILER_GRACE_MS));
-  return Promise.race([backend.ready().then(() => true, () => false), grace]);
-}
-
-/**
- * @param {{toDialog?: boolean}} options  Report into a dialog when there may be
- *   no visible panel to report into, i.e. when invoked from a menu command.
- */
-async function rerenderAllNow({ toDialog = false } = {}) {
-  const report = (text, kind) => (toDialog
-    ? dialogs.showMessage(text, "Re-render all")
-    : setStatus(text, kind, { sticky: true }));
-
-  if (!await ensureCompiler()) {
-    report("The Typst compiler runs inside the panel — open the Typst Math panel first.", "error");
-    return;
-  }
-
-  let doc;
-  try {
-    doc = activeDocument();
-  } catch (err) {
-    report(err.message, "error");
-    return;
-  }
-  setBusy(true, "Re-rendering…");
-  try {
-    const summary = await rerenderAll({
-      doc,
-      preamble: state.preamble,
-      engine: state.engine,
-      render: (request, want) => backend.render(request, want),
-      onProgress: (i, n) => setStatus(`Re-rendering ${i + 1} of ${n}…`, "busy"),
-    });
-    const failed = summary.failures.length
-      ? `, ${summary.failures.length} failed: ${summary.failures[0].message}`
-      : "";
-    // A batch is exactly where an alignment regression would hide, so the worst
-    // residual is still measured and still reported — to the console, where a
-    // number in points is worth something.
-    const alignment = summary.worstResidual !== null && summary.worstResidual !== undefined
-      ? `, worst alignment ${summary.worstResidual.toFixed(2)} pt`
-      : "";
-    const blind = summary.unmeasured ? `, ${summary.unmeasured} unmeasured` : "";
-    console.log(`[typst] re-rendered ${summary.updated} of ${summary.total}` +
-      `${failed}${alignment}${blind}`);
-    // A pass that worked shows itself: every equation in the document redraws.
-    // What it cannot show is one that was skipped, or a document where it found
-    // nothing to do — which from the outside is identical to it never running.
-    if (summary.failures.length) {
-      report(`Re-rendered ${summary.updated} of ${summary.total}${failed}`, "error");
-    } else if (!summary.total) {
-      report("No Typst equations in this document.", "");
-    }
-  } catch (err) {
-    report(String((err && err.message) || err), "error");
-  } finally {
-    setBusy(false);
-  }
-}
-
-function aboutText() {
-  return [
-    state.engine || "compiler not started",
-    state.wasmSource ? `wasm via ${state.wasmSource}` : "",
-    `${fonts.names().length} extra font file(s)`,
-  ].filter(Boolean).join("\n");
-}
+let view = null;
 
 /**
  * Dispatch for the panel flyout menu and the command entrypoints, which share
@@ -584,150 +62,45 @@ function aboutText() {
  */
 function invokeMenu(id) {
   if (id === "settings") return dialogs.showSettings();
-  if (id === "rerender") return rerenderAllNow({ toDialog: true });
-  if (id === "about") return dialogs.showMessage(aboutText(), "About Typst Math");
+  if (id === "rerender") return actions.rerenderAllNow({ toDialog: true });
+  if (id === "about") return dialogs.showMessage(actions.aboutText(), "About Typst Math");
   return undefined;
 }
 
-/* -------------------------------------------------------------------- boot */
-
-/** Why these are properties on plain controls rather than sp-* tags: widgets.js. */
-function applyButtonVariants() {
-  widgets.applyVariants(el, {
-    insert: ["cta"],
-    revert: ["secondary"],
-    settingsToggle: [null, true],
-    preambleSaveDefault: ["secondary"],
-    preambleResetDefault: ["secondary"],
-  });
-}
-
-function bindElements() {
-  widgets.bind(el, {
-    editor: "editor", preview: "preview", status: "status", insert: "insert",
-    revert: "revert", mode: "mode", sizeMode: "size-mode", sizePt: "size-pt",
-    colorMode: "color-mode", settingsToggle: "settings-toggle",
-    tabEquation: "tab-equation", tabPreamble: "tab-preamble",
-    preambleDot: "preamble-dot", preambleActions: "preamble-actions",
-    preambleHint: "preamble-hint",
-    preambleSaveDefault: "preamble-save-default",
-    preambleResetDefault: "preamble-reset-default",
-  });
-}
-
-function wireEvents() {
-  el.editor.addEventListener("input", () => {
-    if (state.tab === "preamble") {
-      state.preamble = editorText();
-      // Editing it makes it this document's, whatever it started as.
-      state.preambleFromDefault = false;
-      syncPreambleUI();
-      savePreamble();
-    } else {
-      state.body = editorText();
-    }
-    requestPreview();
-  });
-  el.editor.addEventListener("keydown", (event) => {
-    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-      event.preventDefault();
-      commit();
-    }
-  });
-
-  el.mode.addEventListener("change", () => {
-    state.mode = el.mode.value;
-    requestPreview();
-  });
-  el.sizeMode.addEventListener("change", () => {
-    state.sizeMode = el.sizeMode.value;
-    el.sizePt.disabled = state.sizeMode !== "fixed";
-    requestPreview();
-  });
-  el.sizePt.addEventListener("input", () => {
-    const value = parseFloat(el.sizePt.value);
-    if (value > 0) state.sizePt = value;
-    requestPreview();
-  });
-  el.colorMode.addEventListener("change", () => {
-    state.colorMode = el.colorMode.value;
-    requestPreview();
-  });
-
-  el.insert.addEventListener("click", commit);
-  el.revert.addEventListener("click", () => {
-    if (!state.editing) return;
-    // The editor's contents changing back is the confirmation.
-    loadRecord(state.editing);
-  });
-
-  el.settingsToggle.addEventListener("click", () => dialogs.showSettings());
-
-  el.tabEquation.addEventListener("click", () => switchTab("equation"));
-  el.tabPreamble.addEventListener("click", () => switchTab("preamble"));
-
-  el.preambleSaveDefault.addEventListener("click", () => {
-    prefs.write({ defaultPreamble: state.preamble });
-    // Silence has to mean it worked, and `prefs.write` swallows a refused
-    // `setItem` — localStorage is a cache Adobe reserves the right to drop. So
-    // read it back rather than trust the call, exactly as the InDesign side
-    // does with a property assignment.
-    if (prefs.read().defaultPreamble !== state.preamble) {
-      setStatus("Could not save the default preamble.", "error");
-    }
-  });
-  el.preambleResetDefault.addEventListener("click", () => {
-    state.preamble = prefs.read().defaultPreamble;
-    showInEditor("preamble", state.preamble);
-    state.preambleFromDefault = false;
-    syncPreambleUI();
-    savePreamble();
-    requestPreview();
-  });
-}
-
-function watchSelection() {
-  let usingEvents = false;
-  try {
-    app.addEventListener("afterSelectionChanged", onSelectionChanged);
-    usingEvents = true;
-  } catch { /* fall back to polling */ }
-  // Poll regardless: it is cheap, and it also catches document switches and
-  // formatting changes around the cursor, which the event does not fire for.
-  setInterval(() => {
-    loadDocumentPreamble();
-    if (!usingEvents) onSelectionChanged();
-  }, SELECTION_POLL_MS);
-  if (usingEvents) setInterval(onSelectionChanged, SELECTION_POLL_MS * 3);
-}
-
 async function start() {
-  bindElements();
   // Before anything is drawn: this picks every colour in the panel, and the
   // wrong one against the host's chrome is merely hard to read rather than
   // obviously broken. See src/ui/theme.js for why the host cannot be asked
   // directly.
   const resolved = theme.resolve();
   theme.apply(resolved);
-  applyButtonVariants();
-  wireEvents();
-  applyDefaults();
-  syncEditingUI();
+
+  view = viewModule.create(store, {
+    preview: () => actions.requestPreview(),
+    commit: () => actions.commit(),
+    revert: () => actions.revert(),
+    settings: () => dialogs.showSettings(),
+    savePreamble: () => actions.savePreamble(),
+    saveDefaultPreamble: () => actions.saveDefaultPreamble(),
+    resetDefaultPreamble: () => actions.resetDefaultPreamble(),
+  });
+  actions.applyDefaults();
+  view.paint();
+
   dialogs.configure({
-    engine: () => (state.wasmSource ? `${state.engine} · wasm via ${state.wasmSource}` : state.engine),
-    reloadFonts: () => reloadFonts(true),
+    engine: () => actions.engineLabel(),
+    reloadFonts: () => actions.reloadFonts(true),
     // A default only reaches the toolbar when nothing is being edited; changing
     // it must not silently rewrite the equation the user has selected.
-    onDefaults: (stored) => { if (!state.editing) applyDefaults(stored); },
-    onError: (message) => setStatus(message, "error"),
+    onDefaults: (stored) => { if (!store.get().editing) actions.applyDefaults(stored); },
+    onError: (message) => actions.setStatus(message, "error"),
   });
-  setStatus("Starting Typst compiler…", "busy");
+  actions.setStatus("Starting Typst compiler…", "busy");
 
-  backend.attach(el.preview);
+  backend.attach(view.preview);
   try {
     const { engine, wasmSource } = await backend.ready();
-    state.engine = engine;
-    state.wasmSource = wasmSource || "";
+    store.set({ engine, wasmSource: wasmSource || "" });
     // The same answer the panel styled itself with — the preview rendering
     // light against a dark panel was the visible half of this being wrong. And
     // from here on the two stay together: the host's theme can change while the
@@ -740,18 +113,18 @@ async function start() {
     // panel has nothing else to announce: the preview says "Type an
     // expression…" for itself. Settings and About carry the engine string.
     console.log(`[typst] ${engine}${wasmSource ? ` · wasm via ${wasmSource}` : ""}`);
-    setStatus("");
+    actions.setStatus("");
   } catch (err) {
-    setStatus(`Compiler failed to start: ${(err && err.message) || err}`, "error");
+    actions.setStatus(`Compiler failed to start: ${(err && err.message) || err}`, "error");
     return;
   }
 
-  loadDocumentPreamble();
+  actions.loadDocumentPreamble();
   // A font that has gone missing must not stop the panel from starting; the
   // status line already says what happened.
-  try { await reloadFonts(false); } catch { /* reported by reloadFonts */ }
-  watchSelection();
-  onSelectionChanged();
+  try { await actions.reloadFonts(false); } catch { /* reported by reloadFonts */ }
+  actions.watchSelection();
+  actions.onSelectionChanged();
 }
 
 module.exports = { start, invokeMenu };
