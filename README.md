@@ -20,8 +20,11 @@ alongside it — no `typst` binary, no LaTeX, no internet connection.
 
 1. Download **`indesign-typst-<version>.ccx`** from the
    [latest release](../../releases/latest).
-2. Double-click it. Creative Cloud installs the plugin.
-3. Restart InDesign. The panel is under **Plug-Ins ▸ Typst Math**.
+2. Double-click it. Creative Cloud asks you to confirm an install from outside
+   its Marketplace — this plugin is not distributed through Adobe, so that
+   dialog is expected — and then installs it.
+3. The panel is under **Plug-Ins ▸ Typst Math**. If it is not there, restart
+   InDesign.
 
 Needs InDesign 2026 (21.4.1 or newer). The download is around 25 MB, most of it
 the Typst compiler; nothing else is fetched at any point.
