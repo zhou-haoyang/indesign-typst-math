@@ -33,6 +33,14 @@ long-lived and had been carrying 588 KB of an abandoned experiment that
 `manifest.json` and `package.json` disagree on the version, or if the manifest
 points at a file that is not there — releases move both numbers.
 
+**`manifest.id` is `7ddb9a79`, issued by Adobe for the Marketplace listing**, and
+the portal rejects an upload that disagrees with it. Nothing in the plugin reads
+it, so renaming it to something legible would break nothing until a human was
+standing at the portal; `release.yml` asserts it instead. It is *not* the
+`indesign-typst` in `src/id/label.js`, `src/ui/prefs.js` and `src/ui/fonts.js` —
+those name the script label written into user documents and the `localStorage`
+keys, and following the id there orphans every saved equation and setting.
+
 Publishing a GitHub release runs the same two commands on a runner
 (`.github/workflows/release.yml`) and attaches the `.ccx`. Everything but the
 app suite runs there, and one trap governs how: **a check that cannot find its

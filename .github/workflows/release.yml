@@ -34,6 +34,20 @@ jobs:
             exit 1
           fi
 
+      # Adobe issues the plugin id when the Marketplace listing is created, and
+      # rejects an upload whose manifest disagrees with it. Nothing in the plugin
+      # reads that string, so a rename breaks nothing here and stays invisible
+      # until someone is standing at the portal with a package it will not take.
+      # Note this is *not* the "indesign-typst" in label.js or prefs.js — those
+      # name data in user documents and localStorage, and must not follow it.
+      - name: Check the manifest id against the listing
+        run: |
+          id=$(node -p 'require("./manifest.json").id')
+          if [ "$id" != "7ddb9a79" ]; then
+            echo "::error::manifest.json id is \"$id\", but the Adobe listing is 7ddb9a79"
+            exit 1
+          fi
+
       - uses: actions/setup-node@v7
         with:
           node-version: 22

@@ -1,7 +1,7 @@
 {
-  "id": "indesign-typst",
+  "id": "7ddb9a79",
   "name": "Typst Math",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "main": "index.html",
   "host": {
     "app": "ID",

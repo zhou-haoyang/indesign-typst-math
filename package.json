@@ -1,6 +1,6 @@
 {
   "name": "indesign-typst",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Write Typst math expressions and place them into Adobe InDesign as editable anchored objects.",
   "license": "MIT",
   "private": true,

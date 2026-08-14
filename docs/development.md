@@ -137,6 +137,17 @@ About box), that every file the manifest points at exists — icons take an
 neither of them is that one — and that `vendor/` holds exactly what
 `npm run setup` emits.
 
+**`manifest.id` is `7ddb9a79`, which Adobe issued for the Marketplace listing**,
+and the portal rejects an upload whose manifest disagrees with it. Nothing in the
+plugin reads it, so a well-meaning rename back to something legible breaks
+nothing that any check here would notice — which is why `release.yml` asserts it.
+It is also *not* the `indesign-typst` in `src/id/label.js`, `src/ui/prefs.js` and
+`src/ui/fonts.js`: those name the script label written into user documents and
+the `localStorage` keys, so changing them orphans saved equations and settings.
+The archive keeps the readable name for the same reason — `7ddb9a79-0.1.0.ccx`
+on a release page tells nobody anything, and the filename means nothing to
+InDesign or to the portal.
+
 That last one is why it rebuilds `vendor/` from scratch rather than trusting it.
 The folder is gitignored and long-lived, so it accumulates: it was carrying
 588 KB of Spectrum Web Components from an experiment that never shipped, which

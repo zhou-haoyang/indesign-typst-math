@@ -123,7 +123,11 @@ for (const path of SHIP) {
   if (!(await exists(path))) fail(`missing: ${path}`);
 }
 
-const ccx = join("dist", `${manifest.id}-${manifest.version}.ccx`);
+// Named from package.json, not from `manifest.id`: that id is the opaque string
+// Adobe issued for the Marketplace listing, and a release page offering
+// `7ddb9a79-0.1.0.ccx` tells whoever is downloading it nothing. The archive's
+// name means nothing to InDesign or to the portal — only what is inside does.
+const ccx = join("dist", `${pkg.name}-${manifest.version}.ccx`);
 await mkdir(join(ROOT, "dist"), { recursive: true });
 // zip *updates* an existing archive rather than replacing it, which would keep
 // entries no longer in SHIP. Start from nothing.
