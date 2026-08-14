@@ -1,10 +1,12 @@
+<img src="listing/icon-192.png" alt="The Typst Math icon: an italic x set above two lines of text, white on a rounded square running green into teal." width="96">
+
 # Typst Math for InDesign
 
 **Write a maths expression in [Typst](https://typst.app), watch it render, and
 drop it into your document — where it stays editable.**
 
 <p align="center">
-  <img src="docs/panel.png" alt="The Typst Math panel in InDesign: Style, Size and Colour controls above an Equation editor, a live preview of y = x² with its baseline marked, and an Insert button." width="400">
+  <img src="docs/sample-text.png" alt="The panel beside an InDesign text frame. A passage on the heat equation carries inline equations set in the running text — a lone alpha, u(x, t), a fraction — alongside three display equations on their own lines. The panel shows Style set to Display, Size and Colour both on Match text reading 18.0 and cmyk(0%, 0%, 0%, 100%), the source of the integral below them, and its preview." width="900">
 </p>
 
 Equations go in as **anchored objects** that sit correctly on the baseline, in
