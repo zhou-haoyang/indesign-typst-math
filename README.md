@@ -196,6 +196,25 @@ file is excluded by default rather than by remembering to exclude it. Both
 copies of each wasm go in: the base64 sidecars are the fallback for when
 `fetch` is blocked, not a build artefact.
 
+### Icons
+
+Three variants of the Typst mark — the "t" from Typst's own wordmark
+(`typst.app/assets/images/typst.svg`), rasterised by the `typst` CLI and set in
+a canvas by hand:
+
+| File | Size (@1x/@2x) | What it is | Where InDesign shows it |
+| --- | --- | --- | --- |
+| `icons/dark.png` | 23 / 46 | white mark, no background | panel tab, dark themes |
+| `icons/light.png` | 23 / 46 | `#2C2C2C` mark, no background | panel tab, light themes |
+| `icons/plugin.png` | 24 / 48 | white mark on Typst's green→teal gradient | the plugins list |
+
+The two panel icons are the mark alone because the tab draws its own chrome, and
+they are a flat colour rather than the brand gradient because they sit against
+the panel's own background at 23px. The plugins-list icon is the badge, its
+gradient and its 56%-of-the-square glyph lifted from Typst's app icon. The pixel
+sizes are the ones the placeholder set already used, and `manifest.json` states a
+size alongside each path, so moving off them means editing it too.
+
 ### Releasing
 
 Publishing a GitHub release runs `.github/workflows/release.yml`, which builds
