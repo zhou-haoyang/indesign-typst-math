@@ -158,7 +158,12 @@
 
       <div class="section">
         <sp-detail class="section-title">New equations start as</sp-detail>
-        <div class="row">
+        <!-- The same three units as the panel, in the same order and wrapping
+             on the same rule, because they are the same three choices. Splitting
+             them across two hand-made rows put Colour beside Style and Size on a
+             line of its own, so the two places disagreed about where each
+             control lives and neither lined up with the other. -->
+        <div class="controls">
           <label class="field">
             <sp-label>Style</sp-label>
             <select id="dlg-mode">
@@ -167,21 +172,19 @@
             </select>
           </label>
           <label class="field">
-            <sp-label>Colour</sp-label>
-            <select id="dlg-color-mode">
-              <option value="auto">Match text</option>
-              <option value="black">Black</option>
-            </select>
-          </label>
-        </div>
-        <div class="row">
-          <label class="field">
             <sp-label>Size</sp-label>
             <select id="dlg-size-mode">
               <option value="auto">Match text</option>
               <option value="fixed">Fixed</option>
             </select>
             <input type="number" id="dlg-size-pt" min="1" max="600" step="0.5" value="10" title="Point size">
+          </label>
+          <label class="field">
+            <sp-label>Colour</sp-label>
+            <select id="dlg-color-mode">
+              <option value="auto">Match text</option>
+              <option value="black">Black</option>
+            </select>
           </label>
         </div>
       </div>
