@@ -49,6 +49,9 @@ node tools/probe-indesign.mjs                  # standard report: properties,
                                                # anchoring geometry, stroke
 node tools/probe-indesign.mjs --scratch 'return J({ n: frame.lines.length });'
 node tools/probe-indesign.mjs 'J({ v: app.version })'
+
+node tools/probe-uxp-css.mjs                   # does the host implement these
+node tools/probe-uxp-css.mjs position:sticky   # CSS properties, or drop them?
 ```
 
 `--scratch` runs the snippet inside a throwaway document with `doc`, `page` and
@@ -98,13 +101,17 @@ suite (`tools/test-store.mjs`, `test-spec.mjs`, `test-theme.mjs`,
 `test-selection.mjs`, `test-tokens.mjs`), as are `prefs` and the preamble
 envelope (`test-prefs.mjs`) — all of them by stubbing `indesign`, `uxp` and
 `localStorage` before the module under test loads, the way `test-prefs.mjs`
-does. Everything under `webview/` is covered by the browser suite, being plain
+does. `panel-view.js` joins them via a small DOM stub (`test-view.mjs`), which
+asserts *when* a control is written — the caret rules, the tab stack, which
+editor holds which buffer — since that is where its regressions live.
+Everything under `webview/` is covered by the browser suite, being plain
 browser code.
 
-Not covered: `panel-view.js`, `actions.js` and `settings-dialog.js`, which need
-a human reloading the plugin. Their *logic* has mostly been lifted into the pure
-modules above; what is left is DOM wiring and orchestration. When changing them,
-the checks worth doing by hand are the ones no test can reach — type in the
+Not covered: `actions.js` and `settings-dialog.js`, which need a human reloading
+the plugin. Their *logic* has mostly been lifted into the pure modules above;
+what is left is DOM wiring and orchestration. And no stub can say whether UXP
+lays any of it out, whether a widget honours a property, or whether the result
+is legible, so the checks worth doing by hand stay the same — type in each
 editor and watch the caret, type a decimal into the size field, switch tabs,
 select an equation, insert and watch the status line persist.
 
@@ -190,7 +197,7 @@ src/ui/panel-view.js   the panel's DOM: bind, wire, render from the store
 src/ui/actions.js      preview, insert/update, selection, preamble, fonts
 src/ui/store.js        the state, and who to tell when it changes
 src/ui/status.js       what the status line is allowed to say  (pure)
-src/ui/spec.js         panel state <-> render request, tab buffers  (pure)
+src/ui/spec.js         panel state <-> render request  (pure)
 src/ui/selection.js    finding the selected equation
 src/ui/theme.js        which palette to paint in, and keeping it current
 src/ui/widgets.js      the only module that knows what tag a control is
@@ -361,8 +368,21 @@ application. The InDesign ones are demonstrated by
   vertical rhythm in the dialog comes from margins; a `<button>` is drawn as a
   native pill that ignores `background`/`border`, so the tab strip is built from
   `<span>`s; a `<textarea>` that spends its life inside a `display: none`
-  subtree never becomes editable, which is why the two editor tabs share one
-  textarea and swap its contents rather than hiding one.
+  subtree never becomes editable, which is why the two editor tabs stack their
+  controls and park the inactive one off-stage rather than hiding it.
+- **Each editor tab owns its control; nothing is swapped in and out of one.**
+  One shared `sp-textarea` was the earlier answer to the `display: none` trap
+  above, and it let the tabs bleed into one another: the widget keeps whatever
+  was typed into it and can refuse a `.value` write, so a swap could leave the
+  previous tab's source on screen — and the next keystroke saved that text into
+  the other buffer. Both editors now live in `.editor-stack`, absolutely
+  positioned on top of each other at full size, and `.offstage` moves the
+  inactive one 20000px to the left. Neither is ever hidden, neither is ever
+  reloaded on a tab switch, and `tools/test-view.mjs` pins both. `position`,
+  `top`, `left` and `opacity` were measured as implemented before being relied
+  on (`node tools/probe-uxp-css.mjs`), and the editors state a width and height
+  regardless, so that if positioning ever stops working the failure is loud —
+  two editors down the panel — rather than two zero-size custom elements.
 - **Prefer the native Spectrum widget, and accept that it is a sealed box.** The
   editors are `sp-textarea`, per Adobe's documented order (Spectrum Web
   Components, then `sp-*` widgets, then plain HTML) and by the maintainer's
@@ -410,6 +430,19 @@ application. The InDesign ones are demonstrated by
   mean the value was wrong: check whether the *property* survives before
   theorising about the value. Ignoring that turned one editor-caret bug into
   four rounds of plausible, confidently-argued, wrong explanations.
+  **That check takes seconds and needs no reload**: `node tools/probe-uxp-css
+  .mjs position:sticky` asks the host directly. A UXP script has a document of
+  its own — not the panel's, but the same CSS engine — so a declaration can be
+  set and read back: a kept property round-trips through `element.style`, a
+  dropped one reads back `undefined` there and `""` from `getComputedStyle`.
+  It reports both an inline style and a real stylesheet, since the panel's CSS
+  arrives the second way, and it carries `gap` and `caret-color` as controls so
+  a broken probe says so instead of reporting everything kept. Measured this
+  way so far: `position`, `top`, `left`, `opacity`, `z-index`, `overflow`,
+  `transform`, `display`, `width`, `height`, `flex` and `min-height` are kept;
+  `gap`, `caret-color`, `grid-template-columns` and `backdrop-filter` are
+  dropped. What it cannot answer is whether a kept property lays out sensibly —
+  that is still an eye and `tools/shoot-indesign.mjs`.
   Worth keeping if the editor ever goes back to a plain `<textarea>`: it draws
   no caret at all under `ui-monospace, SFMono-Regular, …` (Chromium/Apple
   keywords the host cannot resolve — name faces that exist), and once it does

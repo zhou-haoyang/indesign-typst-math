@@ -12,12 +12,6 @@
  * back as a return value.
  */
 
-/** What the editor shows when a tab is empty. */
-const PLACEHOLDER = {
-  equation: "Typst math, e.g.  sum_(i=1)^n x_i / 2",
-  preamble: "#let vb(x) = math.bold(x)\n#set text(font: \"New Computer Modern\")",
-};
-
 /**
  * Does anything on screen need reading off the document?
  *
@@ -131,29 +125,7 @@ function stateFromRecord(record) {
   return patch;
 }
 
-/** Which buffer the one editor is currently showing. */
-function visibleFor(state) {
-  return state.tab === "preamble" ? state.preamble : state.body;
-}
-
-/**
- * Switching tabs, given what the editor currently shows.
- *
- * One editor serves both tabs — two of them, with the inactive one hidden, left
- * the preamble permanently unfocusable — so a switch means writing the visible
- * text back to the buffer it belongs to before loading the other.
- *
- * @returns {object|null} a patch, or null when already on that tab
- */
-function swapTab(state, name, visibleText) {
-  if (state.tab === name) return null;
-  const patch = { tab: name };
-  if (state.tab === "preamble") patch.preamble = visibleText;
-  else patch.body = visibleText;
-  return patch;
-}
-
 module.exports = {
-  PLACEHOLDER, wantsContext, resolveTypography, toSpec, describeDiagnostics,
-  staleNote, stateFromRecord, visibleFor, swapTab,
+  wantsContext, resolveTypography, toSpec, describeDiagnostics,
+  staleNote, stateFromRecord,
 };

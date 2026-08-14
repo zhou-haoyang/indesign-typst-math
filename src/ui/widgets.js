@@ -15,8 +15,9 @@
  *     applies to the InDesign DOM applies to UXP's widgets too, so writes that
  *     matter are read back.
  *   - **A custom element's property does not necessarily reflect to an
- *     attribute**, which is why `placeholder` is set as an attribute and the
- *     Spectrum variants as properties. Neither is interchangeable.
+ *     attribute**, and the two are not interchangeable: the Spectrum variants
+ *     below are set as properties because that is where they were found, and
+ *     every placeholder is an attribute in index.html for the same reason.
  */
 
 /** Reading a control that may or may not have been upgraded yet. */
@@ -59,11 +60,6 @@ function setText(element, text) {
 
 function toggleClass(element, name, on) {
   if (element) element.classList.toggle(name, !!on);
-}
-
-/** Attribute, not property — see the note at the top of this file. */
-function setPlaceholder(element, text) {
-  if (element) element.setAttribute("placeholder", text);
 }
 
 function focus(element) {
@@ -115,6 +111,6 @@ function bind(target, ids) {
 }
 
 module.exports = {
-  value, setValue, setEditorValue, setDisabled, setText, toggleClass, setPlaceholder, focus,
+  value, setValue, setEditorValue, setDisabled, setText, toggleClass, focus,
   setVariant, applyVariants, bind,
 };

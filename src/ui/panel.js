@@ -23,9 +23,9 @@ const store = createStore({
   engine: "",
   wasmSource: "",
   /**
-   * Which buffer the editor is currently showing. One control serves both tabs:
-   * two of them, with the inactive one hidden, left the preamble permanently
-   * unfocusable.
+   * Which editor is on stage. Each tab has one of its own, holding its own text;
+   * hiding the inactive one is what is not allowed, since a UXP text control
+   * that spends time inside a `display: none` subtree never becomes editable.
    */
   tab: "equation",
   body: "",

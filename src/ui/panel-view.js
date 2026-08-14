@@ -8,22 +8,23 @@
  *
  * Two invariants, both of them measured rather than stylistic:
  *
- *   - **No node is created, removed or re-parented after boot, and no ancestor
- *     of #editor is ever hidden.** A UXP text control that spends any time
- *     inside a `display: none` subtree never becomes editable again. That is
- *     why one editor serves both tabs by swapping its contents.
+ *   - **No node is created, removed or re-parented after boot, and neither
+ *     editor, nor any ancestor of one, is ever hidden.** A UXP text control that
+ *     spends any time inside a `display: none` subtree never becomes editable
+ *     again. The two editors are stacked and the inactive one parked off-stage
+ *     instead; see .editor-stack in panel.css.
  *   - **A control is written only when it is idle and out of date.** The panel
  *     re-derives its state from a 700 ms poll; writing `.value` on a focused
  *     field moves the caret, and writing it while someone types "1." would
  *     round-trip through parseFloat and hand back "1".
  */
-const spec = require("./spec");
 const status = require("./status");
 const widgets = require("./widgets");
 const { changed } = require("./store");
 
 const IDS = {
-  editor: "editor", preview: "preview", status: "status", insert: "insert",
+  editor: "editor", preambleEditor: "preamble-editor",
+  preview: "preview", status: "status", insert: "insert",
   revert: "revert", mode: "mode", sizeMode: "size-mode", sizePt: "size-pt",
   colorMode: "color-mode", settingsToggle: "settings-toggle",
   tabEquation: "tab-equation", tabPreamble: "tab-preamble",
@@ -53,12 +54,26 @@ function create(store, on) {
   widgets.applyVariants(el, VARIANTS);
 
   /**
-   * The editor's three accessors. Everything that touches the widget goes
-   * through them, so that swapping it costs these plus the one tag in
-   * index.html — which is what kept the last swap to two files.
+   * One editor per tab, and the accessors everything else goes through — so
+   * that swapping the widget costs these plus the two tags in index.html, which
+   * is what kept the last swap to two files.
    */
-  const editorText = () => widgets.value(el.editor);
-  const setEditorText = (text) => widgets.setEditorValue(el.editor, text);
+  const editors = { equation: el.editor, preamble: el.preambleEditor };
+  const editorText = (tab) => widgets.value(editors[tab]);
+
+  /**
+   * Load a buffer into its editor.
+   *
+   * Skipped while the user is in that box, because a view pass runs on every
+   * 700 ms selection poll and writing `.value` moves the caret to the start.
+   * `force` is for the one case that outranks that: selecting a different
+   * equation is a request to see its source.
+   */
+  function writeEditor(tab, text, force) {
+    const element = editors[tab];
+    if (!force && document.activeElement === element) return;
+    if (editorText(tab) !== text) widgets.setEditorValue(element, text);
+  }
 
   function writeIfIdle(element, value) {
     if (!element || document.activeElement === element) return;
@@ -71,18 +86,16 @@ function create(store, on) {
    * below it exactly as much as the equation does — and for the same reason it
    * is not in the settings dialog, which would cover the preview entirely.
    *
-   * The two tabs share one editor, so switching means writing the visible text
-   * back to the buffer it belongs to and loading the other. Which buffer that
-   * is, and the round-trip guarantee, are src/ui/spec.js's business.
+   * Each tab owns an editor that keeps its own text, so switching moves the
+   * stack and nothing else: no buffer is read back or reloaded, and the two
+   * cannot bleed into one another the way one shared control could.
    */
   function switchTab(name) {
-    const patch = spec.swapTab(store.get(), name, editorText());
-    if (!patch) return;
-    store.set(patch);
+    if (!store.set({ tab: name })) return;
     // Not part of render: focus is a consequence of the *click*, not of the
     // state being what it is, and re-focusing on every pass would fight the
     // user.
-    widgets.focus(el.editor);
+    widgets.focus(editors[name]);
   }
 
   function render(next, previous) {
@@ -94,24 +107,24 @@ function create(store, on) {
       if (status.worthLogging(next.status)) console.log(`[typst] ${next.status.text}`);
     }
 
-    const tabChanged = changed(previous, next, "tab");
-    if (tabChanged) {
+    if (changed(previous, next, "tab")) {
       const preamble = next.tab === "preamble";
-      widgets.setPlaceholder(el.editor, spec.PLACEHOLDER[next.tab]);
+      // Which editor is on stage. Never `display: none`: see the file header.
+      widgets.toggleClass(el.editor, "offstage", preamble);
+      widgets.toggleClass(el.preambleEditor, "offstage", !preamble);
       widgets.toggleClass(el.preambleActions, "hidden", !preamble);
       widgets.toggleClass(el.tabEquation, "active", !preamble);
       widgets.toggleClass(el.tabPreamble, "active", preamble);
     }
 
-    // Switching tabs, or selecting a different equation, always reloads the
-    // editor — that is the whole point of either. A buffer changing underneath
-    // does so only when the user is not in the box.
-    const reloaded = tabChanged || changed(previous, next, "editing");
-    const bufferChanged = changed(previous, next, "body", "preamble");
-    if (reloaded || (bufferChanged && document.activeElement !== el.editor)) {
-      const wanted = spec.visibleFor(next);
-      if (editorText() !== wanted) setEditorText(wanted);
+    // Each editor already holds its own tab's text, so a switch reloads nothing.
+    // What is left is a buffer changing underneath: the document's preamble
+    // arriving, or a selected equation's source.
+    const reselected = changed(previous, next, "editing");
+    if (reselected || changed(previous, next, "body")) {
+      writeEditor("equation", next.body, reselected);
     }
+    if (changed(previous, next, "preamble")) writeEditor("preamble", next.preamble);
 
     if (changed(previous, next, "editing")) {
       widgets.setText(el.insert, next.editing ? "Update" : "Insert");
@@ -142,21 +155,23 @@ function create(store, on) {
 
   function wire() {
     el.editor.addEventListener("input", () => {
-      if (store.get().tab === "preamble") {
-        // Editing it makes it this document's, whatever it started as.
-        store.set({ preamble: editorText(), preambleFromDefault: false });
-        on.savePreamble();
-      } else {
-        store.set({ body: editorText() });
-      }
+      store.set({ body: editorText("equation") });
       on.preview();
     });
-    el.editor.addEventListener("keydown", (event) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-        event.preventDefault();
-        on.commit();
-      }
+    el.preambleEditor.addEventListener("input", () => {
+      // Editing it makes it this document's, whatever it started as.
+      store.set({ preamble: editorText("preamble"), preambleFromDefault: false });
+      on.savePreamble();
+      on.preview();
     });
+    for (const editor of Object.values(editors)) {
+      editor.addEventListener("keydown", (event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+          event.preventDefault();
+          on.commit();
+        }
+      });
+    }
 
     el.mode.addEventListener("change", () => {
       store.set({ mode: widgets.value(el.mode) });

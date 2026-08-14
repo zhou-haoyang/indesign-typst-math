@@ -152,7 +152,10 @@ that a half-typed decimal in the size field survives the state round trip.
 What it cannot cover is anything about how the host actually behaves: whether
 UXP lays a rule out, whether a widget honours a property, whether the result is
 legible. Those need a reload, and `node tools/shoot-indesign.mjs` will
-photograph the result.
+photograph the result. One question does not: UXP's CSS parser silently discards
+properties it has not implemented, and `node tools/probe-uxp-css.mjs` asks the
+running host which ones survive, so a rule that does nothing can be diagnosed
+before anyone theorises about its value.
 
 `npm run test:app` is the interesting one. A UXP script shares the plugin's
 module system, so the test drives the actual `src/id/*` code inside a live

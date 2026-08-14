@@ -9,10 +9,7 @@
  *   back — silently rendering at 10 pt beside 24 pt text reads as a bug;
  *
  *   an old record with no size or colour must leave the toolbar alone, not
- *   reset it to the defaults;
- *
- *   the two tab buffers survive a round trip, which is the invariant that keeps
- *   one editor serving both tabs.
+ *   reset it to the defaults.
  *
  *   node tools/test-spec.mjs
  */
@@ -156,31 +153,6 @@ check("a size with no pt falls back to 10",
   spec.stateFromRecord({ size: { mode: "fixed" } }).sizePt, 10);
 check("a non-auto colour is black",
   spec.stateFromRecord({ color: { mode: "whatever" } }).colorMode, "black");
-
-/* ------------------------------------------------- tab buffers */
-
-check("visible text on the equation tab", spec.visibleFor({ ...base, body: "b", preamble: "p" }), "b");
-check("visible text on the preamble tab",
-  spec.visibleFor({ ...base, tab: "preamble", body: "b", preamble: "p" }), "p");
-
-check("switching to the tab already shown is a no-op",
-  spec.swapTab({ ...base, tab: "equation" }, "equation", "b"), null);
-check("leaving the equation tab saves the body",
-  spec.swapTab({ ...base, tab: "equation" }, "preamble", "edited"),
-  { tab: "preamble", body: "edited" });
-check("leaving the preamble tab saves the preamble",
-  spec.swapTab({ ...base, tab: "preamble" }, "equation", "edited"),
-  { tab: "equation", preamble: "edited" });
-
-{
-  // The invariant that lets one editor serve both tabs: a round trip must leave
-  // both buffers exactly as they were.
-  let state = { ...base, tab: "equation", body: "B", preamble: "P" };
-  state = { ...state, ...spec.swapTab(state, "preamble", spec.visibleFor(state)) };
-  state = { ...state, ...spec.swapTab(state, "equation", spec.visibleFor(state)) };
-  check("a there-and-back tab switch preserves both buffers",
-    [state.body, state.preamble, state.tab], ["B", "P", "equation"]);
-}
 
 console.log(failures ? `\n${failures} failure(s)` : "\nall good");
 process.exit(failures ? 1 : 0);

@@ -305,9 +305,7 @@ function create(store) {
     // "reset it to the default".
     //
     // `tab` is in the same patch because selecting an equation is a request to
-    // see its source, so it comes back from the preamble tab — and because the
-    // buffer it should show has to be set in the same breath, or the view would
-    // load the tab's *old* contents.
+    // see its source, so it comes back from the preamble tab.
     store.set({
       editing: { frame, record, id: tryGet(() => frame.id, null) },
       tab: "equation",

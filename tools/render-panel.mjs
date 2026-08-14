@@ -136,10 +136,14 @@ async function build(variant) {
     if (start < 0) throw new Error("index.html: no <dialog> marking the end of the panel");
     content = content.slice(0, start);
     if (variant === "preamble") {
+      // What the view does on a tab switch, by hand: the active tab, the
+      // preamble's buttons, and which of the two stacked editors is on stage.
       content = content
         .replace('id="tab-equation" class="tab active"', 'id="tab-equation" class="tab"')
         .replace('id="tab-preamble" class="tab"', 'id="tab-preamble" class="tab active"')
-        .replace('id="preamble-actions" class="row hidden"', 'id="preamble-actions" class="row"');
+        .replace('id="preamble-actions" class="row hidden"', 'id="preamble-actions" class="row"')
+        .replace('id="editor" placeholder', 'id="editor" class="offstage" placeholder')
+        .replace('id="preamble-editor" class="offstage"', 'id="preamble-editor"');
     }
   }
 

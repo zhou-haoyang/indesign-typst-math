@@ -55,23 +55,34 @@
       <span id="tab-preamble" class="tab">Preamble<span id="preamble-dot" class="dot hidden">&#9679;</span></span>
     </div>
 
-    <!-- One editor serves both tabs, swapping its contents. Two of them, with
-         the inactive one display:none, left the preamble unfocusable: a UXP
-         textarea that spends its life inside a hidden subtree never becomes
-         editable. One always-visible control cannot hit that.
+    <!-- One editor per tab, each holding its own text for the life of the panel.
+         One shared control swapping its contents was the earlier shape, and it
+         let the two tabs bleed into one another: sp-textarea keeps whatever the
+         user typed and can refuse a `.value` write, so a swap could leave the
+         previous tab's source on screen — and the next keystroke then saved it
+         into the other buffer.
+
+         Neither is ever `display: none`, which is what that shape was avoiding:
+         a UXP text control that spends time inside a hidden subtree never
+         becomes editable. They are stacked instead, both laid out at full size,
+         with the inactive one parked off-stage. See .editor-stack in panel.css.
 
          sp-textarea, the native Spectrum widget, chosen over a plain <textarea>
          so the control themes itself and draws its own caret. The cost is that
          it renders into a *closed* shadow root, so nothing inside it can be
          styled — a monospace face for the Typst source is not available at any
-         price. Reading and writing goes through the helpers in panel.js so that
-         swapping the widget is one change. -->
+         price. Reading and writing goes through the helpers in panel-view.js so
+         that swapping the widget is one change. -->
     <!-- The editor and the preview share whatever height is left over, on a
          fixed ratio. Before this box existed the editor was a hard 84px and the
          preview took everything else, so making the panel taller only ever grew
          the preview. -->
     <div class="workspace">
-      <sp-textarea id="editor" placeholder="Typst math, e.g.  sum_(i=1)^n x_i / 2"></sp-textarea>
+      <div class="editor-stack">
+        <sp-textarea id="editor" placeholder="Typst math, e.g.  sum_(i=1)^n x_i / 2"></sp-textarea>
+        <sp-textarea id="preamble-editor" class="offstage"
+          placeholder="#let vb(x) = math.bold(x)&#10;#set text(font: &quot;New Computer Modern&quot;)"></sp-textarea>
+      </div>
 
       <div id="preamble-actions" class="row hidden">
         <button id="preamble-save-default" title="Use this preamble for new documents">Save as default</button>

@@ -62,7 +62,7 @@ globalThis.document = {
 
 const at = (id) => globalThis.document.getElementById(id);
 // Track writes through the property, so "was it written" is answerable.
-for (const id of ["editor", "size-pt", "mode", "size-mode", "color-mode"]) {
+for (const id of ["editor", "preamble-editor", "size-pt", "mode", "size-mode", "color-mode"]) {
   const element = at(id);
   let held = "";
   Object.defineProperty(element, "value", {
@@ -118,9 +118,12 @@ function mount(overrides = {}) {
 /* ------------------------------------------------------------- first paint */
 
 {
-  mount({ body: "x^2" });
-  check("paints the editor from state", at("editor").value, "x^2");
-  check("paints the placeholder", at("editor").attributes.placeholder.startsWith("Typst math"), true);
+  mount({ body: "x^2", preamble: "#let a = 1" });
+  check("paints the equation editor from state", at("editor").value, "x^2");
+  check("paints the preamble editor too", at("preamble-editor").value, "#let a = 1");
+  check("the preamble editor starts off-stage",
+    at("preamble-editor").classList.contains("offstage"), true);
+  check("and the equation editor on it", at("editor").classList.contains("offstage"), false);
   check("Insert is disabled with no metrics", at("insert").disabled, true);
   check("Insert reads Insert when not editing", at("insert").textContent, "Insert");
   check("Revert is hidden when not editing", at("revert").classList.contains("hidden"), true);
@@ -170,29 +173,59 @@ function mount(overrides = {}) {
 {
   const store = mount({ body: "B", preamble: "P" });
   at("tab-preamble").fire("click");
-  check("switching tab loads the other buffer", at("editor").value, "P");
+  check("switching tab brings its editor on stage",
+    [at("editor").classList.contains("offstage"),
+      at("preamble-editor").classList.contains("offstage")], [true, false]);
   check("the preamble tab is active", at("tab-preamble").classList.contains("active"), true);
   check("the equation tab is not", at("tab-equation").classList.contains("active"), false);
   check("preamble actions appear", at("preamble-actions").classList.contains("hidden"), false);
-  check("the placeholder follows the tab", at("editor").attributes.placeholder.startsWith("#let"), true);
   check("the store agrees", store.get().tab, "preamble");
 
   at("tab-equation").fire("click");
-  check("and back again", at("editor").value, "B");
-  check("both buffers survived the round trip",
-    [store.get().body, store.get().preamble], ["B", "P"]);
+  check("and back again",
+    [at("editor").classList.contains("offstage"),
+      at("preamble-editor").classList.contains("offstage")], [false, true]);
+  check("each editor still holds its own text",
+    [at("editor").value, at("preamble-editor").value], ["B", "P"]);
+  check("and so do the buffers", [store.get().body, store.get().preamble], ["B", "P"]);
 }
 
 {
-  // Switching tabs must reload the editor even though the editor is focused —
-  // it is focused *because* switchTab focuses it, and a naive idle-guard would
-  // then refuse to load the buffer.
+  // The reason there are two editors: a switch must not read one control's text
+  // back into the other's buffer, and it must not rewrite either control. One
+  // shared sp-textarea could refuse the write and keep the previous tab's source
+  // on screen, which the next keystroke then saved into the wrong buffer.
+  const store = mount({ body: "B", preamble: "P" });
+  const before = [at("editor").writes, at("preamble-editor").writes];
+  at("tab-preamble").fire("click");
+  at("tab-equation").fire("click");
+  check("a tab switch writes neither editor",
+    [at("editor").writes, at("preamble-editor").writes], before);
+  check("and leaves both buffers alone", [store.get().body, store.get().preamble], ["B", "P"]);
+}
+
+{
   const store = mount({ body: "B", preamble: "P" });
   at("editor").focus();
   at("tab-preamble").fire("click");
-  check("a tab switch reloads a focused editor", at("editor").value, "P");
-  check("and leaves focus in the editor", globalThis.document.activeElement, at("editor"));
+  check("switching tab moves focus to that tab's editor",
+    globalThis.document.activeElement, at("preamble-editor"));
   check("store tab followed", store.get().tab, "preamble");
+}
+
+{
+  // Same caret hazard as the equation editor, on the other control: the poll
+  // re-reads the document's preamble every 700 ms.
+  const store = mount({ tab: "preamble", preamble: "P" });
+  at("preamble-editor").focus();
+  const before = at("preamble-editor").writes;
+  store.set({ preamble: "P!" });
+  check("a focused preamble editor is not rewritten underneath the user",
+    at("preamble-editor").writes, before);
+
+  globalThis.document.activeElement = null;
+  store.set({ preamble: "P?" });
+  check("an idle one does take the new text", at("preamble-editor").value, "P?");
 }
 
 /* --------------------------------------------------------------- selection */
@@ -263,8 +296,8 @@ function mount(overrides = {}) {
 
 {
   const store = mount({ tab: "preamble", preamble: "P" });
-  at("editor").value = "P2";
-  at("editor").fire("input");
+  at("preamble-editor").value = "P2";
+  at("preamble-editor").fire("input");
   check("editing the preamble updates that buffer", store.get().preamble, "P2");
   check("and marks it as this document's", store.get().preambleFromDefault, false);
   check("and persists it", calls.includes("savePreamble"), true);

@@ -187,7 +187,7 @@ select {
   margin-top: var(--space);
 }
 
-/* Both editors are sp-textarea, so the box is all that is set here.
+/* Every editor is an sp-textarea, so the box is all that is set here.
 
    Nothing else can be: the widget renders into a closed shadow root, and its
    font, colours, caret and padding all belong to it. That is the trade — it
@@ -197,6 +197,7 @@ select {
 
    A custom element has no useful intrinsic size, so the box has to be stated. */
 #editor,
+#preamble-editor,
 #dlg-default-preamble {
   display: block;
   width: 100%;
@@ -214,9 +215,39 @@ select {
   flex-direction: column;
 }
 
-#editor {
+/* The two editors are stacked, not shown and hidden, because a UXP text control
+   that spends time inside a `display: none` subtree never becomes editable.
+   Both stay laid out at full size; the inactive one is moved off-screen.
+
+   The stack takes the editor's share of the split, so it carries the flex that
+   #editor used to.
+
+   `position`, `top`, `left` and `opacity` all survive this host's CSS parser,
+   in a stylesheet as well as inline — measured with `node tools/probe-uxp-css
+   .mjs`, which is the cheap way to settle that before theorising about a value.
+   `width`/`height` are stated anyway, so that if absolute positioning ever
+   stops laying out here the fallback is two editors down the panel rather than
+   a pair of zero-size custom elements, which is the silent kind of wrong. */
+.editor-stack {
+  position: relative;
   flex: 2 1 0;
   min-height: 60px;
+}
+
+.editor-stack > sp-textarea {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Off-screen rather than transparent or unclickable: `left` is intrinsic to
+   absolute positioning, where `opacity` and `pointer-events` would each be one
+   more property this host might quietly drop. The opacity is belt and braces. */
+.editor-stack > sp-textarea.offstage {
+  left: -20000px;
+  opacity: 0;
 }
 
 #preamble-actions,
