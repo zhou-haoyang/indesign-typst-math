@@ -156,6 +156,14 @@ def main():
     try:
         run(["typst", "--version"])
     except Exception:
+        # Skipping locally is right — not everyone has the CLI. Skipping in CI
+        # is not: this returns 0, so a runner without typst would report a pass
+        # for the check on `depth`, the number inline anchoring rests on. The
+        # release workflow installs the CLI before running this, but that is
+        # another file's promise; $CI is what makes the check say so itself.
+        if os.environ.get("CI"):
+            print("typst CLI not found, and $CI is set — refusing to skip.")
+            return 1
         print("typst CLI not found; skipping template validation.")
         return 0
 
