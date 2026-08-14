@@ -315,6 +315,16 @@ point size and colour are baked into the render, read from the text at the
 insertion point. That is why "re-render all" exists: equations recorded as `auto`
 re-read their context, making the pass a sync rather than a recompile.
 
+A fixed colour is not read from anywhere: it is a **Typst expression the user
+typed** (`red`, `rgb("#c00")`, or something the preamble names), so `spec.color`
+is either `{space, values}` from a swatch or `{typst}` from the box, and
+everything it passes through — `src/ui/spec.js`, the record in `src/id/label.js`,
+`src/id/rerender.js`, `webview/template.js` — has to carry both. Nothing
+validates the expression, because only Typst can: a bad one is a compile error,
+and a compile error belongs to the preview. It is emitted **parenthesised** into
+the `#set text(…)` line so that a stray comma cannot break out of the argument
+list and turn a colour error into a baffling one about the template.
+
 ### Editability
 
 A JSON record on the frame's script label (`src/id/label.js`) is the only source
@@ -414,6 +424,12 @@ application. The InDesign ones are demonstrated by
   and read back `undefined` when built inside a hidden container, so they
   probably need to be connected and laid out before their menu is usable —
   worth knowing before anyone converts the six `<select>`s.
+  A plain `<input type="text">` holds and reports back an arbitrary string and
+  honours `disabled`, which is what the colour box relies on. Its neighbour is
+  the trap: `<input type="number">` **silently discards a value it cannot
+  parse** — assigning `rgb("#cc0000")` to one leaves it reading `""` — so
+  copying the point-size field's markup for anything else empties the box with
+  no error anywhere.
   How to test this again, since three obvious approaches do not work here:
   `getBoundingClientRect` returns 0x0 outside the visible flow, `constructor
   .name` is unavailable on every element, and `customElements.get` denies

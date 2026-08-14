@@ -58,14 +58,39 @@ console.log("prefs.merge folds stored values onto the defaults:");
   check("nothing stored gives the panel's own defaults",
     d.defaultPreamble === "" && d.newEquation.mode === "inline" &&
     d.newEquation.sizeMode === "auto" && d.newEquation.sizePt === 10 &&
-    d.newEquation.colorMode === "auto", JSON.stringify(d.newEquation));
+    d.newEquation.colorMode === "auto" && d.newEquation.colorText === "black",
+    JSON.stringify(d.newEquation));
 }
 {
-  const d = prefs.merge({ newEquation: { mode: "display", sizeMode: "fixed", sizePt: 11, colorMode: "black" } });
+  const d = prefs.merge({
+    newEquation: {
+      mode: "display", sizeMode: "fixed", sizePt: 11,
+      colorMode: "fixed", colorText: 'rgb("#cc0000")',
+    },
+  });
   check("valid values pass through untouched",
     d.newEquation.mode === "display" && d.newEquation.sizeMode === "fixed" &&
-    d.newEquation.sizePt === 11 && d.newEquation.colorMode === "black",
+    d.newEquation.sizePt === 11 && d.newEquation.colorMode === "fixed" &&
+    d.newEquation.colorText === 'rgb("#cc0000")',
     JSON.stringify(d.newEquation));
+}
+{
+  // "black" was the fixed colour before there was a box to type one into.
+  // Falling back to "auto" would silently hand someone who chose it a panel set
+  // to match the text instead.
+  const d = prefs.merge({ newEquation: { colorMode: "black" } });
+  check("the old black setting migrates to fixed black",
+    d.newEquation.colorMode === "fixed" && d.newEquation.colorText === "black",
+    JSON.stringify(d.newEquation));
+}
+{
+  // Only Typst can say whether an expression is one, so nothing here judges it
+  // — but a non-string would reach a control that expects one.
+  check("a colour expression is stored as typed",
+    prefs.merge({ newEquation: { colorText: "  luma(30%) " } }).newEquation.colorText
+      === "  luma(30%) ");
+  check("a non-string colour falls back to the default",
+    prefs.merge({ newEquation: { colorText: { evil: true } } }).newEquation.colorText === "black");
 }
 {
   const d = prefs.merge({ newEquation: { mode: "nonsense", sizeMode: "", colorMode: 7 } });

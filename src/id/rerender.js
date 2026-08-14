@@ -17,6 +17,11 @@ const {
 } = require("./insert");
 const { anchorCharacter } = require("./anchor");
 
+/** Does this stored colour say anything, in either of the two shapes? */
+function hasColor(color) {
+  return !!color && !!(color.values || color.typst);
+}
+
 /**
  * Work out what an existing equation should be rendered as right now.
  * `auto` fields are re-read from the text; `fixed` fields keep their record.
@@ -26,7 +31,10 @@ function specForExisting(frame, record, preamble) {
     body: record.body,
     mode: record.mode,
     size: (record.size && record.size.pt) || 10,
-    color: (record.color && record.color.values) ? record.color : undefined,
+    // Either shape counts as a colour to keep: a swatch ({space, values}) read
+    // off the text when it was inserted, or the Typst expression ({typst}) that
+    // was typed into the panel's colour box.
+    color: hasColor(record.color) ? record.color : undefined,
     preamble,
   };
   const wantsSize = !record.size || record.size.mode === "auto";
@@ -40,17 +48,30 @@ function specForExisting(frame, record, preamble) {
   return spec;
 }
 
+/**
+ * The colour to store back: whichever shape the render actually used.
+ *
+ * A `{typst}` expression must not be flattened into a swatch here — it is the
+ * only copy of what the user typed, and losing it would leave the next re-render
+ * with nothing to render a fixed colour from.
+ */
+function colorFor(record, spec) {
+  const mode = (record.color && record.color.mode) || "auto";
+  if (spec.color && spec.color.typst) return { mode, typst: spec.color.typst };
+  return {
+    mode,
+    space: spec.color ? spec.color.space : "CMYK",
+    values: spec.color ? spec.color.values : [0, 0, 0, 100],
+  };
+}
+
 /** The record to store back after a re-render, preserving the auto/fixed modes. */
 function recordFor(record, spec, metrics, preamble, engine) {
   return makeRecord({
     body: spec.body,
     mode: spec.mode,
     size: { mode: (record.size && record.size.mode) || "auto", pt: spec.size },
-    color: {
-      mode: (record.color && record.color.mode) || "auto",
-      space: spec.color ? spec.color.space : "CMYK",
-      values: spec.color ? spec.color.values : [0, 0, 0, 100],
-    },
+    color: colorFor(record, spec),
     preamble,
     metrics,
     engine,

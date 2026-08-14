@@ -185,7 +185,10 @@ function create(store) {
       body: request.body,
       mode: request.mode,
       size: { mode: state.sizeMode, pt: request.size },
-      color: { mode: state.colorMode, space: request.color.space, values: request.color.values },
+      // Spread rather than named fields, because the colour is one of two
+      // shapes: {space, values} read off the text, or {typst} typed into the
+      // box. Naming them here quietly wrote `space: undefined` for the second.
+      color: { mode: state.colorMode, ...request.color },
       preamble: state.preamble,
       metrics,
       engine: state.engine,
@@ -433,6 +436,7 @@ function create(store) {
       sizeMode: wanted.sizeMode,
       sizePt: wanted.sizePt,
       colorMode: wanted.colorMode,
+      colorText: wanted.colorText,
     });
   }
 

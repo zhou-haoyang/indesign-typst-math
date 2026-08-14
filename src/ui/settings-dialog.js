@@ -54,7 +54,8 @@ function bind() {
     dialog: "settings-dialog-3", fontList: "dlg-font-list", addFonts: "dlg-add-fonts",
     clearFonts: "dlg-clear-fonts", defaultPreamble: "dlg-default-preamble",
     mode: "dlg-mode", sizeMode: "dlg-size-mode", sizePt: "dlg-size-pt",
-    colorMode: "dlg-color-mode", engine: "dlg-engine", status: "dlg-status",
+    colorMode: "dlg-color-mode", colorText: "dlg-color-text",
+    engine: "dlg-engine", status: "dlg-status",
     done: "dlg-done",
     message: "message-dialog-2", messageText: "msg-text", messageOk: "msg-ok",
   });
@@ -138,6 +139,8 @@ function loadPrefs() {
   widgets.setValue(el.sizePt, current.newEquation.sizePt);
   widgets.setDisabled(el.sizePt, current.newEquation.sizeMode !== "fixed");
   widgets.setValue(el.colorMode, current.newEquation.colorMode);
+  widgets.setValue(el.colorText, current.newEquation.colorText);
+  widgets.setDisabled(el.colorText, current.newEquation.colorMode !== "fixed");
 }
 
 function wire() {
@@ -163,7 +166,8 @@ function wire() {
 
   const writeEquationDefault = (patch) => {
     const next = prefs.write({ newEquation: patch });
-    el.sizePt.disabled = next.newEquation.sizeMode !== "fixed";
+    widgets.setDisabled(el.sizePt, next.newEquation.sizeMode !== "fixed");
+    widgets.setDisabled(el.colorText, next.newEquation.colorMode !== "fixed");
     deps.onDefaults(next);
   };
   el.mode.addEventListener("change", () => writeEquationDefault({ mode: el.mode.value }));
@@ -173,6 +177,9 @@ function wire() {
     if (value > 0) writeEquationDefault({ sizePt: value });
   });
   el.colorMode.addEventListener("change", () => writeEquationDefault({ colorMode: el.colorMode.value }));
+  // Stored as typed, like the panel's own box: this is a Typst expression on
+  // its way to being one, and there is nothing here that could judge it.
+  el.colorText.addEventListener("input", () => writeEquationDefault({ colorText: el.colorText.value }));
 
   el.done.addEventListener("click", () => el.dialog.close());
   el.messageOk.addEventListener("click", () => el.message.close());

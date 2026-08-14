@@ -33,7 +33,7 @@ will land. `Cmd/Ctrl+Enter` inserts.
 | --- | --- |
 | **Style** | `Inline` anchors on the baseline; `Display` anchors above the line, centred |
 | **Size** | `Match text` reads the point size at the cursor; `Fixed` uses the value you set |
-| **Colour** | `Match text` reads the fill of the text at the cursor, CMYK values included |
+| **Colour** | `Match text` reads the fill of the text at the cursor, CMYK values included; `Fixed` takes a Typst colour of your own — `black`, `red`, `rgb("#cc0000")`, `cmyk(0%, 100%, 100%, 0%)`, or anything your preamble names |
 | **Preamble** tab | Typst prelude shared by every equation in *this document* — `#let` macros, `#set text(font: …)`, `#show` rules |
 
 To edit an equation, select it: the panel loads its source, and the button

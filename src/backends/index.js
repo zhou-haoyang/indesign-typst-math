@@ -22,6 +22,11 @@
  *
  * `spec` is { body, mode: "inline"|"display", size, color, preamble }.
  *
+ * `color` comes in one of two shapes, and a backend has to take both:
+ * `{space, values}` is a swatch read off the InDesign text (the "match text"
+ * case), and `{typst}` is a colour expression the user typed into the panel,
+ * in the source language of whatever backend is rendering it.
+ *
  * RenderResult is
  *   {
  *     ok: boolean,

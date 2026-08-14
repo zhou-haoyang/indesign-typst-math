@@ -50,9 +50,24 @@ function normalizeBody(raw) {
   return t;
 }
 
-/** Typst colour literal from a colour descriptor read off the InDesign swatch. */
+/**
+ * Typst colour literal from a colour descriptor.
+ *
+ * Two shapes arrive here. `{space, values}` is a swatch read off the InDesign
+ * text, converted below. `{typst}` is an expression the user typed into the
+ * panel and is emitted as-is — but *parenthesised*, so that a stray comma or
+ * bracket cannot break out of the `#set text(…)` argument list it lands in.
+ * That keeps a bad colour a Typst error about the colour rather than a
+ * baffling one about the template, which is the difference between a message
+ * the preview can show and one nobody can act on.
+ */
 function colorLiteral(color) {
-  if (!color) return 'rgb("#000000")';
+  if (color && typeof color.typst === "string" && color.typst.trim()) {
+    return `(${color.typst.trim()})`;
+  }
+  // Includes a `{typst}` that turned out to be empty: an empty box means black,
+  // not `()`, which Typst would read as an array and reject.
+  if (!color || !color.values) return 'rgb("#000000")';
   if (color.space === "CMYK") {
     const [c, m, y, k] = color.values;
     return `cmyk(${+c}%, ${+m}%, ${+y}%, ${+k}%)`;

@@ -17,6 +17,12 @@ const CASES = [
   { name: "deep descender", spec: { body: "sum_(i=1)^n x_i / 2", mode: "inline", size: 10 }, want: { pdf: true } },
   { name: "display", spec: { body: "integral_0^1 f(x) dif x", mode: "display", size: 12 }, want: { pdf: true } },
   { name: "cmyk colour", spec: { body: "alpha", mode: "inline", size: 11, color: { space: "CMYK", values: [0, 100, 0, 0] } }, want: { pdf: true } },
+  // A colour typed into the panel's box: Typst's own syntax, straight through.
+  { name: "typst colour", spec: { body: "alpha", mode: "inline", size: 11, color: { typst: 'rgb("#cc0000")' } }, want: { pdf: true } },
+  // The reason it is parenthesised. Without that, the comma ends the fill
+  // argument and the error is about `#set text`, which says nothing useful
+  // about the colour; with it, the failure stays a colour error.
+  { name: "colour that is not one", spec: { body: "alpha", mode: "inline", size: 11, color: { typst: "red, blue" } }, want: {}, expectError: true },
   { name: "preamble macro", spec: { body: "vb(x)", mode: "inline", size: 10, preamble: "#let vb(x) = math.bold(x)" }, want: {} },
   { name: "syntax error", spec: { body: "x^", mode: "inline", size: 10 }, want: {}, expectError: true },
   { name: "preamble error", spec: { body: "x", mode: "inline", size: 10, preamble: "#let = 5" }, want: {}, expectError: true },

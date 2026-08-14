@@ -99,7 +99,7 @@ const result = await runUxp(driver(`
     const recordFor = (c) => makeRecord({
       body: c.body, mode: "inline",
       size: { mode: "fixed", pt: c.size },
-      color: { mode: "black", space: "CMYK", values: [0, 0, 0, 100] },
+      color: { mode: "fixed", typst: "black" },
       preamble: "", metrics: { width: c.width, height: c.height, depth: c.depth },
       engine: "test",
     });

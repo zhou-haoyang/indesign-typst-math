@@ -12,6 +12,23 @@
  * back as a return value.
  */
 
+/** What an empty colour box means, and what the old "Black" option meant. */
+const DEFAULT_COLOR = "black";
+
+/**
+ * Tidy a hand-typed Typst colour expression.
+ *
+ * Whitespace only: anything more would mean reimplementing Typst's parser here
+ * to guess at what is valid. A wrong value is a compile error, and a compile
+ * error belongs to the preview, which already draws it under the artwork that
+ * failed. The one thing worth collapsing is a newline, which a paste can carry
+ * into a single-line field and which would break the `#set text(…)` line it
+ * ends up in.
+ */
+function typstColor(text) {
+  return String(text == null ? "" : text).replace(/\s+/g, " ").trim() || DEFAULT_COLOR;
+}
+
 /**
  * Does anything on screen need reading off the document?
  *
@@ -37,7 +54,12 @@ function wantsContext(state) {
 function resolveTypography(state, at, black) {
   const notes = [];
   let size = state.sizePt;
-  let color = black;
+  // Two shapes, and the backend takes either: a swatch read off the document
+  // ({space, values}), or the Typst expression the user typed ({typst}). A
+  // fixed colour has nothing to read and nothing to convert — it is already in
+  // the language the template speaks. `black` is only the fallback for an
+  // `auto` colour with no text to match.
+  let color = state.colorMode === "auto" ? black : { typst: typstColor(state.colorText) };
 
   if (wantsContext(state)) {
     if (at) {
@@ -120,7 +142,15 @@ function stateFromRecord(record) {
     patch.sizePt = record.size.pt || 10;
   }
   if (record.color) {
-    patch.colorMode = record.color.mode === "auto" ? "auto" : "black";
+    patch.colorMode = record.color.mode === "auto" ? "auto" : "fixed";
+    // The box is written only when the record has something to put in it. An
+    // `auto` equation carries the swatch it was rendered from, which is not a
+    // Typst expression and must not land in a field the user types into — and
+    // selecting one is no reason to throw away what they had typed there.
+    // A fixed record from before the box existed has no expression either: the
+    // only fixed colour on offer then was black, which is what it now says.
+    if (record.color.typst) patch.colorText = typstColor(record.color.typst);
+    else if (patch.colorMode === "fixed") patch.colorText = DEFAULT_COLOR;
   }
   return patch;
 }

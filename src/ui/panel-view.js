@@ -26,7 +26,7 @@ const IDS = {
   editor: "editor", preambleEditor: "preamble-editor",
   preview: "preview", status: "status", insert: "insert",
   revert: "revert", mode: "mode", sizeMode: "size-mode", sizePt: "size-pt",
-  colorMode: "color-mode",
+  colorMode: "color-mode", colorText: "color-text",
   tabEquation: "tab-equation", tabPreamble: "tab-preamble",
   preambleDot: "preamble-dot", preambleActions: "preamble-actions",
   preambleHint: "preamble-hint",
@@ -132,12 +132,16 @@ function create(store, on) {
       widgets.toggleClass(el.revert, "hidden", !next.editing);
     }
 
-    if (changed(previous, next, "mode", "sizeMode", "sizePt", "colorMode")) {
+    if (changed(previous, next, "mode", "sizeMode", "sizePt", "colorMode", "colorText")) {
       writeIfIdle(el.mode, next.mode);
       writeIfIdle(el.sizeMode, next.sizeMode);
       writeIfIdle(el.sizePt, next.sizePt);
       widgets.setDisabled(el.sizePt, next.sizeMode !== "fixed");
       writeIfIdle(el.colorMode, next.colorMode);
+      // Same caret rule as the point size, and it bites harder here: every
+      // character of `rgb("#c00")` is a state the poll could write back over.
+      writeIfIdle(el.colorText, next.colorText);
+      widgets.setDisabled(el.colorText, next.colorMode !== "fixed");
     }
 
     if (changed(previous, next, "preamble", "preambleFromDefault", "tab")) {
@@ -189,6 +193,14 @@ function create(store, on) {
     });
     el.colorMode.addEventListener("change", () => {
       store.set({ colorMode: widgets.value(el.colorMode) });
+      on.preview();
+    });
+    // Stored verbatim, half-typed and all: `rgb("#c` is on the way to something
+    // valid, and normalising as it is typed would fight the user the way
+    // parseFloat once ate the point size's decimal point. What an empty or
+    // whitespace box means is decided at render time, in src/ui/spec.js.
+    el.colorText.addEventListener("input", () => {
+      store.set({ colorText: widgets.value(el.colorText) });
       on.preview();
     });
 

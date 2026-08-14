@@ -33,6 +33,8 @@ const store = createStore({
   sizeMode: "auto",
   sizePt: 10,
   colorMode: "auto",
+  /** A Typst colour expression, used when colorMode is "fixed". */
+  colorText: "black",
   preamble: "",
   preambleDoc: null,
   /**

@@ -62,7 +62,8 @@ globalThis.document = {
 
 const at = (id) => globalThis.document.getElementById(id);
 // Track writes through the property, so "was it written" is answerable.
-for (const id of ["editor", "preamble-editor", "size-pt", "mode", "size-mode", "color-mode"]) {
+for (const id of ["editor", "preamble-editor", "size-pt", "mode", "size-mode",
+  "color-mode", "color-text"]) {
   const element = at(id);
   let held = "";
   Object.defineProperty(element, "value", {
@@ -91,8 +92,9 @@ function check(name, got, want) {
 
 const INITIAL = {
   tab: "equation", body: "", preamble: "", mode: "inline", sizeMode: "auto",
-  sizePt: 10, colorMode: "auto", editing: null, lastMetrics: null, busy: false,
-  preambleFromDefault: false, status: statusModule.EMPTY,
+  sizePt: 10, colorMode: "auto", colorText: "black", editing: null,
+  lastMetrics: null, busy: false, preambleFromDefault: false,
+  status: statusModule.EMPTY,
 };
 
 const calls = [];
@@ -159,6 +161,23 @@ function mount(overrides = {}) {
   store.set({ sizePt: 1 });
   check("a focused size field keeps a half-typed decimal",
     [at("size-pt").value, at("size-pt").writes], ["1.", before]);
+}
+
+{
+  // The colour box is on the same 700 ms poll, and a half-typed expression is
+  // worth more than a half-typed number: rewriting `rgb("#c` back over the
+  // user's caret would make the field impossible to type into at all.
+  const store = mount({ colorMode: "fixed", colorText: "black" });
+  at("color-text").focus();
+  at("color-text").value = 'rgb("#c';
+  const before = at("color-text").writes;
+  store.set({ colorText: "black" });
+  check("a focused colour box is not rewritten underneath the user",
+    [at("color-text").value, at("color-text").writes], ['rgb("#c', before]);
+
+  globalThis.document.activeElement = null;
+  store.set({ colorText: "red" });
+  check("an idle one does take the new expression", at("color-text").value, "red");
 }
 
 {
@@ -318,6 +337,15 @@ function mount(overrides = {}) {
   at("size-mode").value = "auto";
   at("size-mode").fire("change");
   check("auto size disables it again", at("size-pt").disabled, true);
+
+  check("matching the text disables the colour box", at("color-text").disabled, true);
+  at("color-mode").value = "fixed";
+  at("color-mode").fire("change");
+  check("a fixed colour enables it", at("color-text").disabled, false);
+  at("color-text").value = 'rgb("#cc0000")';
+  at("color-text").fire("input");
+  check("typing a colour updates state", store.get().colorText, 'rgb("#cc0000")');
+  check("and asks for a preview", calls.includes("preview"), true);
 }
 
 /* ---------------------------------------------------------------- preamble */

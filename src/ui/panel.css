@@ -155,6 +155,18 @@ body {
   width: 58px;
 }
 
+/* Wider than the point box because what goes in it is longer: `black` fits
+   easily, `rgb("#cc0000")` scrolls, and that is the right trade — a box wide
+   enough for the longest colour expression would push the Colour unit onto a
+   line of its own at every dock width. It travels with the picker for the same
+   reason the point box travels with Size: a flex item is never split across
+   lines, and as a child of .controls in its own right it would wrap away from
+   the label that explains it. */
+#color-text,
+#dlg-color-text {
+  width: 96px;
+}
+
 /* Tabs */
 
 /* Spans, not buttons: UXP draws a <button> as a native pill and ignores

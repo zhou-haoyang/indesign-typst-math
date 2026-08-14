@@ -32,15 +32,15 @@ const BLACK = { space: "CMYK", values: [0, 0, 0, 100] };
 const RED = { space: "RGB", values: [255, 0, 0] };
 const base = {
   tab: "equation", body: "x^2", preamble: "", mode: "inline",
-  sizeMode: "auto", sizePt: 10, colorMode: "auto", editing: null,
+  sizeMode: "auto", sizePt: 10, colorMode: "auto", colorText: "black", editing: null,
 };
 
 /* --------------------------------------------------------- wantsContext */
 
-check("auto size needs a read", spec.wantsContext({ ...base, colorMode: "black" }), true);
+check("auto size needs a read", spec.wantsContext({ ...base, colorMode: "fixed" }), true);
 check("auto colour needs a read", spec.wantsContext({ ...base, sizeMode: "fixed" }), true);
 check("both fixed needs no read at all",
-  spec.wantsContext({ ...base, sizeMode: "fixed", colorMode: "black" }), false);
+  spec.wantsContext({ ...base, sizeMode: "fixed", colorMode: "fixed" }), false);
 
 /* ---------------------------------------------------- resolveTypography */
 
@@ -60,9 +60,29 @@ check("both fixed needs no read at all",
 
 {
   const at = { size: 24, color: RED, notes: [] };
-  const got = spec.resolveTypography({ ...base, colorMode: "black" }, at, BLACK);
-  check("black colour ignores the text", got.color, BLACK);
+  const got = spec.resolveTypography({ ...base, colorMode: "fixed" }, at, BLACK);
+  check("a fixed colour ignores the text", got.color, { typst: "black" });
   check("while auto size still reads it", got.size, 24);
+}
+
+{
+  // The box holds a Typst expression, not a swatch: it reaches the backend as
+  // one, and nothing on the way tries to parse or validate it.
+  const at = { size: 24, color: RED, notes: [] };
+  const state = { ...base, colorMode: "fixed", colorText: 'rgb("#cc0000")' };
+  check("a fixed colour is handed over as typed",
+    spec.resolveTypography(state, at, BLACK).color, { typst: 'rgb("#cc0000")' });
+}
+
+{
+  // Empty is what the box says while it is being cleared and retyped, and it
+  // has to render as something rather than as a compile error.
+  const empty = { ...base, colorMode: "fixed", colorText: "   " };
+  check("an empty colour box falls back to black",
+    spec.resolveTypography(empty, null, BLACK).color, { typst: "black" });
+  const pasted = { ...base, colorMode: "fixed", colorText: "cmyk(0%,\n100%, 0%, 0%)" };
+  check("a pasted newline is collapsed, not left to break the set line",
+    spec.resolveTypography(pasted, null, BLACK).color, { typst: "cmyk(0%, 100%, 0%, 0%)" });
 }
 
 {
@@ -151,8 +171,20 @@ check("no size means no size keys",
   Object.keys(spec.stateFromRecord({ body: "y" })).sort(), ["body", "mode"]);
 check("a size with no pt falls back to 10",
   spec.stateFromRecord({ size: { mode: "fixed" } }).sizePt, 10);
-check("a non-auto colour is black",
-  spec.stateFromRecord({ color: { mode: "whatever" } }).colorMode, "black");
+check("a non-auto colour is a fixed one",
+  spec.stateFromRecord({ color: { mode: "whatever" } }).colorMode, "fixed");
+check("and a stored expression comes back into the box",
+  spec.stateFromRecord({ color: { mode: "fixed", typst: "red" } }).colorText, "red");
+// Records written before the box existed: the only fixed colour on offer then
+// was black, so that is what the box should say.
+check("a legacy black record loads as the word black",
+  spec.stateFromRecord({ color: { mode: "black", space: "CMYK", values: [0, 0, 0, 100] } }),
+  { body: "", mode: "inline", colorMode: "fixed", colorText: "black" });
+// Selecting a match-text equation must not overwrite what the user has typed:
+// its stored colour is the swatch it was rendered from, not an expression.
+check("an auto colour leaves the box alone",
+  Object.keys(spec.stateFromRecord({ color: { mode: "auto", space: "RGB", values: [1, 2, 3] } })).sort(),
+  ["body", "colorMode", "mode"]);
 
 console.log(failures ? `\n${failures} failure(s)` : "\nall good");
 process.exit(failures ? 1 : 0);

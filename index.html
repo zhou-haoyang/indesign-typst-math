@@ -37,12 +37,19 @@
         </select>
         <input type="number" id="size-pt" min="1" max="600" step="0.5" value="10" title="Point size" disabled>
       </label>
+      <!-- The colour box takes a Typst expression rather than offering a
+           palette: Typst already has one (`red`, `rgb("#c00")`, `cmyk(…)`) and
+           the preamble can name more, so a picker here would be a worse
+           version of the language the rest of the panel is written in. A wrong
+           value is a compile error, which the preview draws. -->
       <label class="field">
         <sp-label>Colour</sp-label>
         <select id="color-mode">
           <option value="auto">Match text</option>
-          <option value="black">Black</option>
+          <option value="fixed">Fixed</option>
         </select>
+        <input type="text" id="color-text" value="black" spellcheck="false"
+          title="Typst colour, e.g. black, red, rgb(&quot;#cc0000&quot;) or cmyk(0%, 100%, 100%, 0%)" disabled>
       </label>
     </div>
 
@@ -183,8 +190,10 @@
             <sp-label>Colour</sp-label>
             <select id="dlg-color-mode">
               <option value="auto">Match text</option>
-              <option value="black">Black</option>
+              <option value="fixed">Fixed</option>
             </select>
+            <input type="text" id="dlg-color-text" value="black" spellcheck="false"
+              title="Typst colour, e.g. black, red, rgb(&quot;#cc0000&quot;) or cmyk(0%, 100%, 100%, 0%)">
           </label>
         </div>
       </div>

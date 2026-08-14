@@ -18,7 +18,14 @@ const VERSION = 1;
 
 const MODES = ["inline", "display"];
 const SIZE_MODES = ["auto", "fixed"];
-const COLOR_MODES = ["auto", "black"];
+const COLOR_MODES = ["auto", "fixed"];
+/**
+ * What a fixed colour was called before there was a box beside it to type one
+ * into. It meant exactly what "black" in that box means now, so it is migrated
+ * rather than discarded — `oneOf` would otherwise hand someone who had chosen
+ * black a panel set to "Match text".
+ */
+const LEGACY_COLOR_MODES = { black: "fixed" };
 // The panel's own input bounds (index.html): a value outside them would be
 // rejected by the control and then written back, so keep the two in step.
 const MIN_PT = 1;
@@ -29,6 +36,7 @@ const DEFAULTS = {
   sizeMode: "auto",
   sizePt: 10,
   colorMode: "auto",
+  colorText: "black",
 };
 
 function oneOf(value, allowed, fallback) {
@@ -55,7 +63,13 @@ function merge(stored) {
       // Clamped, not rejected: 0.5 pt is a typo, not a request for 10 pt, and
       // silently snapping back to the default would hide that.
       sizePt: Number.isFinite(pt) ? Math.min(MAX_PT, Math.max(MIN_PT, pt)) : DEFAULTS.sizePt,
-      colorMode: oneOf(eq.colorMode, COLOR_MODES, DEFAULTS.colorMode),
+      colorMode: oneOf(LEGACY_COLOR_MODES[eq.colorMode] || eq.colorMode,
+        COLOR_MODES, DEFAULTS.colorMode),
+      // Any string, unvalidated: this is a Typst expression, and only Typst can
+      // say whether it is one. An empty box is left empty rather than reset —
+      // src/ui/spec.js decides what emptiness renders as, so the two places do
+      // not have to agree on a default.
+      colorText: typeof eq.colorText === "string" ? eq.colorText : DEFAULTS.colorText,
     },
   };
 }
