@@ -3,4 +3,5 @@ vendor/
 dist/
 .DS_Store
 .uxp-driver-*.idjs
+.*.html
 .ui-shots/
