@@ -168,6 +168,34 @@ InDesign over AppleScript rather than reimplementing it: placement, anchoring,
 the baseline solve, labels, embedding and updating in place, all in a scratch
 document that is closed without saving.
 
+### Packaging
+
+```sh
+npm run package       # → dist/indesign-typst-<version>.ccx, ~25 MB
+```
+
+A `.ccx` is a zip with `manifest.json` at the top level, which Creative Cloud
+installs on double-click; UXP Developer Tools will make one too, from the
+plugin's **⋯** menu. There is nothing to compile, so the script is really three
+checks and an archive: that `manifest.json` and `package.json` carry the same
+version (the first names the plugin to InDesign, the second is what
+`vendor/versions.json` stamps into the About box), that every file the manifest
+points at exists — icons take an `@1x`/`@2x` suffix per their `scale`, so
+`icons/dark.png` names two files and neither of them is that one — and that
+vendor/ holds exactly what `npm run setup` emits.
+
+That last one is why it rebuilds vendor/ from scratch rather than trusting it.
+The folder is gitignored and long-lived, so it accumulates: it was carrying
+588 KB of Spectrum Web Components from an experiment that never shipped, which
+nothing references and `scripts/vendor.mjs` does not produce. `--keep-vendor`
+skips the rebuild when the wait is not worth it.
+
+What ships is an include list — `manifest.json`, `index.html`, `main.js`,
+`icons/`, `src/`, `webview/`, `vendor/` — not an ignore list, so a new stray
+file is excluded by default rather than by remembering to exclude it. Both
+copies of each wasm go in: the base64 sidecars are the fallback for when
+`fetch` is blocked, not a build artefact.
+
 ### The depth measurement
 
 `validate-template` is the check that matters most. Inline anchoring rests

@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "setup": "node scripts/vendor.mjs",
+    "package": "node scripts/package.mjs",
     "test": "node tools/run-tests.mjs",
     "test:all": "node tools/run-tests.mjs all",
     "test:browser": "node tools/run-tests.mjs browser",

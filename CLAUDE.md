@@ -22,7 +22,16 @@ npm run test:all      # every suite, ~20s
 npm run test:browser  # headless Chrome: wasm, preview, message bridge
 npm run test:app      # the real plugin code, in a live InDesign
 npm run probe         # ask InDesign a question, see below
+npm run package       # → dist/<id>-<version>.ccx  (--keep-vendor skips the rebuild)
 ```
+
+There is no bundler and no compile step: `npm run setup` is the whole build, and
+`npm run package` zips the runtime files into the `.ccx` Creative Cloud installs.
+It rebuilds `vendor/` from scratch first, because that folder is gitignored and
+long-lived and had been carrying 588 KB of an abandoned experiment that
+`scripts/vendor.mjs` does not produce. It also refuses to build if
+`manifest.json` and `package.json` disagree on the version, or if the manifest
+points at a file that is not there — releases move both numbers.
 
 Suites are split by what they need (`tools/run-tests.mjs`): **unit** needs only
 node, **render** needs the `typst` CLI, **browser** needs headless Chrome and a
