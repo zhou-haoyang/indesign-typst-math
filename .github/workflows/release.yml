@@ -1,0 +1,104 @@
+name: Release
+
+# Builds the .ccx and attaches it to the release that triggered the run.
+#
+# A manual run does everything except the attaching, which is how to exercise
+# this file without publishing anything: the .ccx lands as a workflow artifact
+# either way.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write # `gh release upload`; nothing else here writes anything
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Before the 65 MB vendor build rather than after it, since this needs
+      # nothing but the checkout. InDesign shows the manifest version and the
+      # release page shows the tag, so a mismatch ships a plugin that disagrees
+      # with the page it was downloaded from.
+      - name: Check the tag against the manifest
+        if: github.event_name == 'release'
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          manifest=$(node -p 'require("./manifest.json").version')
+          if [ "${TAG#v}" != "$manifest" ]; then
+            echo "::error::tag $TAG, but manifest.json says $manifest"
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # package.mjs would build vendor/ itself, but it has to happen before the
+      # tests rather than after them, and the next step reads the versions.json
+      # this stamps. On a fresh checkout there is nothing stale for its rebuild
+      # to catch, which is what --keep-vendor is for further down.
+      - name: Build vendor/
+        run: npm run setup
+
+      # The render suite skips itself when the CLI is missing, and reports a
+      # pass while doing so — in CI that is indistinguishable from having run.
+      # So install the exact version typst.ts vendors, and prove it arrived.
+      - name: Install the Typst CLI
+        run: |
+          set -o pipefail  # or a failed download is only ever tar's problem
+          version=$(node -p 'require("./vendor/versions.json").typst')
+          echo "typst $version, per vendor/versions.json"
+          mkdir -p "$HOME/bin"
+          curl -fsSL "https://github.com/typst/typst/releases/download/v$version/typst-x86_64-unknown-linux-musl.tar.xz" \
+            | tar -xJ --strip-components=1 -C "$HOME/bin" --wildcards '*/typst'
+          got=$("$HOME/bin/typst" --version | cut -d' ' -f2)
+          if [ "$got" != "$version" ]; then
+            echo "::error::installed typst $got, expected $version"
+            exit 1
+          fi
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      # unit + render. The browser suite is not run here: tools/harness.mjs
+      # looks for Chrome at a macOS path and exits 0 when it is absent, so on a
+      # Linux runner it would report three passes without opening anything.
+      # The app suite needs a running InDesign and cannot be automated at all.
+      - run: npm test
+
+      - name: Package
+        run: npm run package -- --keep-vendor
+
+      - name: Check what is in the archive
+        id: ccx
+        run: |
+          ccx=$(ls dist/*.ccx)
+          unzip -Z1 "$ccx" > entries.txt
+          grep -qx 'manifest.json' entries.txt || {
+            echo "::error::manifest.json is not at the top level of $ccx"; exit 1; }
+          if grep -nE 'node_modules|^tools/|^scripts/|\.DS_Store' entries.txt; then
+            echo "::error::$ccx carries files that are not part of the plugin"
+            exit 1
+          fi
+          echo "$(wc -l < entries.txt) entries, $(du -h "$ccx" | cut -f1)"
+          echo "path=$ccx" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$ccx")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.ccx.outputs.name }}
+          path: ${{ steps.ccx.outputs.path }}
+          if-no-files-found: error
+
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" "${{ steps.ccx.outputs.path }}" --clobber

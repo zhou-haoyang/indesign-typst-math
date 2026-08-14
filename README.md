@@ -196,6 +196,30 @@ file is excluded by default rather than by remembering to exclude it. Both
 copies of each wasm go in: the base64 sidecars are the fallback for when
 `fetch` is blocked, not a build artefact.
 
+### Releasing
+
+Publishing a GitHub release runs `.github/workflows/release.yml`, which builds
+the `.ccx` and attaches it to that release. Nothing is committed for it — the
+wasm is fetched from npm and vendored on the runner, so a release is a tag and
+nothing else. Running the workflow by hand does the same build and attaches
+nothing, leaving the `.ccx` as a workflow artifact; that is how to test a change
+to it without publishing something.
+
+Two checks are there because they fail quietly otherwise. The tag has to be the
+manifest's version (`v0.1.0` for `0.1.0`), since InDesign shows one and the
+release page shows the other. And the Typst CLI is installed at the version
+`vendor/versions.json` names, then checked — the render suite *skips* itself
+when the CLI is missing and reports a pass while doing it, which on a runner
+looks exactly like having run.
+
+Two suites cannot run there. `tools/harness.mjs` looks for Chrome at a macOS
+path, so the browser suite would skip on a Linux runner the same silent way, and
+the app suite needs a running InDesign. Both stay a local step before tagging:
+
+```sh
+npm run test:all && npm run test:app
+```
+
 ### The depth measurement
 
 `validate-template` is the check that matters most. Inline anchoring rests

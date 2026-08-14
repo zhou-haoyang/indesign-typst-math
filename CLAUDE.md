@@ -33,6 +33,17 @@ long-lived and had been carrying 588 KB of an abandoned experiment that
 `manifest.json` and `package.json` disagree on the version, or if the manifest
 points at a file that is not there — releases move both numbers.
 
+Publishing a GitHub release runs the same two commands on a runner
+(`.github/workflows/release.yml`) and attaches the `.ccx`. **Only the unit and
+render suites run there**, and the reason is a trap worth knowing before adding
+another: a check that cannot find its tool here *skips and exits 0* —
+`validate-template.py` without the `typst` CLI, `tools/harness.mjs` without
+Chrome at its hardcoded macOS path — so a suite added to CI on a Linux runner
+can report a row of passes having opened nothing. That is why the workflow
+installs Typst at the pinned version and then asserts it arrived, and why the
+browser suite is left out rather than left to skip. The app suite needs a
+running InDesign, so `npm run test:app` stays a local step before tagging.
+
 Suites are split by what they need (`tools/run-tests.mjs`): **unit** needs only
 node, **render** needs the `typst` CLI, **browser** needs headless Chrome and a
 populated `vendor/`, **app** needs InDesign running. Individual tests are
