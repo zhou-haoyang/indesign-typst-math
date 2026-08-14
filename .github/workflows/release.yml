@@ -66,11 +66,16 @@ jobs:
           fi
           echo "$HOME/bin" >> "$GITHUB_PATH"
 
-      # unit + render. The browser suite is not run here: tools/harness.mjs
-      # looks for Chrome at a macOS path and exits 0 when it is absent, so on a
-      # Linux runner it would report three passes without opening anything.
-      # The app suite needs a running InDesign and cannot be automated at all.
+      # unit + render, then the wasm compiler, preview and message bridge in the
+      # runner's Chrome. Between them that is everything except the app suite,
+      # which needs a running InDesign and cannot be automated at all.
+      #
+      # $CI is what makes the browser suite worth running here: harness.mjs
+      # skips when it cannot find Chrome, and skipping means exit 0, so without
+      # that variable a runner with no browser reports three passes for three
+      # tests that never opened one. With it, that is a failure.
       - run: npm test
+      - run: npm run test:browser
 
       - name: Package
         run: npm run package -- --keep-vendor

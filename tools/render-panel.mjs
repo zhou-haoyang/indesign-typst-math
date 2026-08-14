@@ -23,9 +23,10 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { chromePath } from "./harness.mjs";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const CHROME = chromePath();
 const OUT = join(ROOT, ".ui-shots");
 
 const args = process.argv.slice(2);
@@ -42,8 +43,8 @@ const WIDTH = flag("width", 420);
 // 520 and 360 that showSettings asks for.
 const HEIGHT = flag("height", 720);
 
-if (!existsSync(CHROME)) {
-  console.error(`no Chrome at ${CHROME}; skipping.`);
+if (!CHROME) {
+  console.error("no Chrome found; skipping. Set $CHROME to override.");
   process.exit(0);
 }
 

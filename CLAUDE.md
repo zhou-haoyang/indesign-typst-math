@@ -34,20 +34,26 @@ long-lived and had been carrying 588 KB of an abandoned experiment that
 points at a file that is not there — releases move both numbers.
 
 Publishing a GitHub release runs the same two commands on a runner
-(`.github/workflows/release.yml`) and attaches the `.ccx`. **Only the unit and
-render suites run there**, and the reason is a trap worth knowing before adding
-another: a check that cannot find its tool here *skips and exits 0* —
-`validate-template.py` without the `typst` CLI, `tools/harness.mjs` without
-Chrome at its hardcoded macOS path — so a suite added to CI on a Linux runner
-can report a row of passes having opened nothing. That is why the workflow
-installs Typst at the pinned version and then asserts it arrived, and why the
-browser suite is left out rather than left to skip. The app suite needs a
-running InDesign, so `npm run test:app` stays a local step before tagging.
+(`.github/workflows/release.yml`) and attaches the `.ccx`. Everything but the
+app suite runs there, and one trap governs how: **a check that cannot find its
+tool skips by exiting 0**, so on a runner it is indistinguishable from a check
+that ran and passed. `validate-template.py` does it without the `typst` CLI and
+`tools/harness.mjs` does it without Chrome. Both are right locally and wrong in
+CI, so the workflow installs Typst at the version `vendor/versions.json` names
+and then asserts the binary reports it, and `requirements()` turns its skip into
+an exit 1 when `$CI` is set. Before adding a check to that workflow, ask what it
+does when its tool is missing — a green run that ran nothing is worse than a red
+one. The app suite needs a running InDesign, so `npm run test:app` stays a local
+step before tagging.
 
 Suites are split by what they need (`tools/run-tests.mjs`): **unit** needs only
 node, **render** needs the `typst` CLI, **browser** needs headless Chrome and a
 populated `vendor/`, **app** needs InDesign running. Individual tests are
 standalone scripts under `tools/` and can be run directly.
+
+Chrome is located by `chromePath()` in `tools/harness.mjs` — `$CHROME`, then the
+`/Applications` bundles, then the four usual names on `PATH` — and that is the
+only copy: `tools/render-panel.mjs` imports it rather than keeping its own.
 
 ## Loading into InDesign
 

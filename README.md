@@ -212,12 +212,16 @@ release page shows the other. And the Typst CLI is installed at the version
 when the CLI is missing and reports a pass while doing it, which on a runner
 looks exactly like having run.
 
-Two suites cannot run there. `tools/harness.mjs` looks for Chrome at a macOS
-path, so the browser suite would skip on a Linux runner the same silent way, and
-the app suite needs a running InDesign. Both stay a local step before tagging:
+Everything but the app suite runs there, including the browser one: `$CHROME`
+aside, `tools/harness.mjs` finds Chrome in `/Applications` or under any of its
+usual names on `PATH`, so a Linux runner needs no help. That suite skips when it
+finds none — and skipping is also an exit 0, so with `$CI` set it fails instead.
+A green run that opened no browser is worse than a red one.
+
+The app suite needs a running InDesign, so it stays a local step before tagging:
 
 ```sh
-npm run test:all && npm run test:app
+npm run test:app
 ```
 
 ### The depth measurement

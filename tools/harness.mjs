@@ -7,25 +7,55 @@ import { createReadStream, existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { dirname, extname, join, normalize } from "node:path";
+import { delimiter, dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
 const MIME = {
   ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript",
   ".json": "application/json", ".css": "text/css", ".wasm": "application/wasm",
 };
 
+/** Bundles on macOS; on Linux, and Homebrew's shims, it is a name on PATH. */
+const BUNDLES = [
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "/Applications/Chromium.app/Contents/MacOS/Chromium",
+];
+const ON_PATH = ["google-chrome-stable", "google-chrome", "chromium", "chromium-browser"];
+
+/**
+ * Where Chrome is, or null. $CHROME wins, so an unusual install needs no edit
+ * here. The PATH walk is what lets these tests run on a CI runner, which has
+ * `google-chrome` and no /Applications at all.
+ */
+export function chromePath() {
+  if (process.env.CHROME) return existsSync(process.env.CHROME) ? process.env.CHROME : null;
+  for (const path of BUNDLES) if (existsSync(path)) return path;
+  for (const dir of (process.env.PATH ?? "").split(delimiter)) {
+    if (!dir) continue;
+    for (const name of ON_PATH) {
+      const path = join(dir, name);
+      if (existsSync(path)) return path;
+    }
+  }
+  return null;
+}
+
 export function requirements() {
   if (!existsSync(join(ROOT, "vendor", "typst_ts_web_compiler_bg.wasm"))) {
     console.error("vendor/ is empty — run `npm install && npm run setup` first.");
     process.exit(1);
   }
-  if (!existsSync(CHROME)) {
-    console.error(`no Chrome at ${CHROME}; skipping.`);
-    process.exit(0);
+  if (!chromePath()) {
+    const looked = [...BUNDLES, ...ON_PATH.map((n) => `${n} on PATH`)].join("\n  ");
+    // Skipping locally is right — not everyone has Chrome, and the runner names
+    // what each suite needs. Skipping *in CI* is not: this exits 0, so the run
+    // would report a row of passes for tests that never opened a browser, which
+    // is worse than not running them. Set $CI (every provider does) and it is a
+    // failure. That is the whole reason this suite can be trusted on a runner.
+    console.error(`no Chrome found. Looked at:\n  ${looked}\nSet $CHROME to override.`);
+    process.exit(process.env.CI ? 1 : 0);
   }
 }
 
@@ -60,7 +90,7 @@ export async function drive(name, html, timeoutMs = 240_000) {
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
 
-  const chrome = spawn(CHROME, [
+  const chrome = spawn(chromePath(), [
     "--headless=new", "--disable-gpu", "--no-sandbox", "--mute-audio",
     `--user-data-dir=${profile}`,
     `http://127.0.0.1:${server.address().port}/.${name}.html`,
