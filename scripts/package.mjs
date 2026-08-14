@@ -27,8 +27,13 @@ const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
  * Everything UXP loads, and nothing else. tools/, scripts/ and node_modules/
  * are unreachable at runtime; an include list rather than an ignore list is
  * what keeps them out for good, since a new stray file defaults to excluded.
+ *
+ * LICENSE is the exception that is not loaded by anything: the archive
+ * redistributes Apache-2.0 wasm, whose licence text vendor.mjs puts in
+ * vendor/licenses/, and shipping theirs while leaving ours out would be an odd
+ * way round.
  */
-const SHIP = ["manifest.json", "index.html", "main.js", "icons", "src", "webview", "vendor"];
+const SHIP = ["manifest.json", "LICENSE", "index.html", "main.js", "icons", "src", "webview", "vendor"];
 
 const keepVendor = process.argv.includes("--keep-vendor");
 
