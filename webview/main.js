@@ -349,6 +349,17 @@ function paint(res, spec) {
   const svg = art.querySelector("svg");
   let haloed = false;
   if (svg) {
+    // typst.ts rounds the page box *up to whole points* in the SVG it emits: a
+    // 34.53 × 12.39 pt page is written `viewBox="0 0 35.000 13.000"`. Its
+    // contents are not scaled to match — a run's baseline still lands at exactly
+    // `height - depth` in those units — so the artwork occupies only part of the
+    // box it is drawn in, and anything positioned as a fraction of that box is
+    // wrong. That is what put the baseline guide half a point low, by more the
+    // smaller the equation: a whole point of slack is 12% of an 8pt page box.
+    // The metrics are the true page, so state them and let the artwork fill it.
+    if (res.metrics.width > 0 && res.metrics.height > 0) {
+      svg.setAttribute("viewBox", `0 0 ${res.metrics.width} ${res.metrics.height}`);
+    }
     svg.setAttribute("width", "100%");
     svg.setAttribute("height", "100%");
     svg.style.width = "100%";

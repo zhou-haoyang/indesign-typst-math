@@ -107,11 +107,40 @@ try {
     const art = doc.getElementById("art");
     const svg = art && art.querySelector("svg");
     const guide = doc.getElementById("baseline");
+    // Where the guide is drawn, and where the artwork's baseline actually is —
+    // both in screen pixels, so the comparison passes through every transform
+    // the SVG applies rather than trusting the box we asked for. The metrics
+    // alone cannot catch a mapping bug: they agree with themselves.
+    let baselineY = null, inkBaseline = null;
+    if (svg && reply.metrics) {
+      const ctm = svg.getScreenCTM();
+      if (ctm) {
+        const pt = svg.createSVGPoint();
+        pt.x = 0;
+        pt.y = reply.metrics.height - reply.metrics.depth;
+        baselineY = pt.matrixTransform(ctm).y;
+      }
+      // The largest text run sits on the equation's own baseline for anything
+      // with nothing stacked at top level, and a run's origin *is* its baseline.
+      let em = 0;
+      for (const run of svg.querySelectorAll("g.typst-text")) {
+        const local = run.transform && run.transform.baseVal.consolidate();
+        const screen = run.getScreenCTM();
+        if (local && screen && Math.abs(local.matrix.a) * 1000 > em) {
+          em = Math.abs(local.matrix.a) * 1000;
+          inkBaseline = screen.f;
+        }
+      }
+    }
     const painted = {
       hasArt: !!art,
       hasSvg: !!svg,
       artHeight: art ? parseFloat(art.style.height) : null,
       guideTop: guide ? parseFloat(guide.style.top) : null,
+      artTop: art ? art.getBoundingClientRect().top : null,
+      guideY: guide ? guide.getBoundingClientRect().top : null,
+      baselineY, inkBaseline,
+      viewBox: svg ? svg.getAttribute("viewBox") : null,
       placeholder: (doc.querySelector("#stage .placeholder") || {}).textContent || "",
       status: (doc.getElementById("status") || {}).textContent || "",
       statusIsError: !!(doc.getElementById("status") || {}).className?.includes("error"),
@@ -240,15 +269,34 @@ for (const row of rows.filter((r) => !r.step)) {
     fail("PDF was returned when it was not asked for");
   }
 
-  // The guide must sit at (height - depth) / height down the artwork box.
+  // The guide must be drawn on the artwork's baseline *as painted*, not at
+  // (height - depth) / height of the box we asked for. Those two are the same
+  // only while the SVG fills that box, and typst.ts rounds the page box up to
+  // whole points in the viewBox it emits — which is what once drew the guide
+  // half a point low while every metric agreed with itself.
   if (expected.spec.mode === "display") {
     if (p.guideTop !== null) fail("display mode should not draw a baseline guide");
   } else {
     if (p.guideTop === null) { fail("no baseline guide drawn"); continue; }
-    const wantFrac = (m.height - m.depth) / m.height;
-    const gotFrac = p.guideTop / p.artHeight;
-    if (Math.abs(wantFrac - gotFrac) > 0.01) {
-      fail(`baseline guide at ${(gotFrac * 100).toFixed(1)}% but depth implies ${(wantFrac * 100).toFixed(1)}%`);
+    if (p.baselineY === null) { fail("could not locate the baseline in the painted SVG"); continue; }
+    const off = p.guideY - p.baselineY;
+    console.log(`   guide ${off >= 0 ? "+" : ""}${off.toFixed(2)} px from the painted baseline` +
+      ` (viewBox ${p.viewBox}, page ${m.width.toFixed(2)} × ${m.height.toFixed(2)})`);
+    if (Math.abs(off) > 1) {
+      fail(`baseline guide is ${Math.abs(off).toFixed(2)} px ` +
+        `${off > 0 ? "below" : "above"} where the artwork's baseline is drawn`);
+    }
+    // And that painted baseline has to be the one the placement will use: an
+    // artwork drawn to a different depth than the one InDesign is handed would
+    // look right here and land wrong in the document.
+    // Skipped where nothing at top level sits on the equation's own baseline —
+    // a fraction's runs are its numerator and denominator, and neither does.
+    if (p.inkBaseline !== null && !/[/]|frac|cases|mat\(|binom|sum|product/.test(expected.spec.body)) {
+      const ink = p.inkBaseline - p.baselineY;
+      if (Math.abs(ink) > 1) {
+        fail(`the ink sits ${Math.abs(ink).toFixed(2)} px from height - depth: ` +
+          `the reported depth does not describe the artwork`);
+      }
     }
   }
 }
@@ -259,11 +307,22 @@ console.log("\nlegibility outline");
 
 /**
  * The same source exports the same PDF byte for byte — measured — except for
- * the second it was made in, which Typst stamps into `/ModDate` and
- * `/CreationDate`. Two renders a moment apart straddle a second often enough
- * that comparing the raw bytes fails about a third of the time.
+ * *when* it was made, which Typst stamps in four places, all of them at
+ * one-second resolution. Two renders a moment apart straddle a second often
+ * enough that comparing the raw bytes fails about a third of the time, and
+ * every one of these had to go before the comparison stopped being a lottery:
+ * `/ModDate` and `/CreationDate`; the same two again in ISO 8601 inside the XMP
+ * packet; and the document identity — `xmpMM:InstanceID`/`DocumentID` and the
+ * trailer's `/ID` — which is a hash seeded from that timestamp.
+ *
+ * All of it is metadata about the export. Stripping it leaves the comparison
+ * looking at the page, which is the only thing this check is about.
  */
-const undated = (b64) => atob(b64).replace(/\/(?:Mod|Creation)Date \(D:[^)]*\)/g, "");
+const undated = (b64) => atob(b64)
+  .replace(/\/(?:Mod|Creation)Date \(D:[^)]*\)/g, "")
+  .replace(/<xmp:(?:Modify|Create)Date>[^<]*<\/xmp:(?:Modify|Create)Date>/g, "")
+  .replace(/<xmpMM:(?:Instance|Document)ID>[^<]*<\/xmpMM:(?:Instance|Document)ID>/g, "")
+  .replace(/\/ID \[[^\]]*\]/g, "");
 for (const c of HALO_CASES) {
   const shots = rows.filter((r) => r.step === "halo" && r.name === c.name);
   if (shots.length !== 2) { fail(`${c.name}: expected both themes, got ${shots.length}`); continue; }

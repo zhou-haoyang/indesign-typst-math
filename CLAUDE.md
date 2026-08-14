@@ -227,7 +227,29 @@ preamble overrides included, and the outline is `0.015em` of that.
 and the PDF.** That is what makes it preview-only by construction rather than by
 remembering to strip it out, and `tools/smoke-preview.mjs` pins it: the same
 expression is rendered in both themes, the outline has to appear in one and not
-the other, and the two PDFs have to be byte-identical.
+the other, and the two PDFs have to be identical once the export metadata is
+stripped. That last word is load-bearing. Typst stamps the export *time* into a
+PDF in four places — `/ModDate`, `/CreationDate`, both again in ISO 8601 inside
+the XMP packet, and the document identity (`xmpMM:InstanceID`/`DocumentID` and
+the trailer's `/ID`, which is a hash seeded from it) — all at one-second
+resolution, so two renders a moment apart differ whenever they straddle a
+second. Strip only some of them and the check fails a few times an hour, which
+reads as an intermittent difference in the artwork rather than as a clock.
+
+**The SVG's viewBox is not the page.** typst.ts rounds the page box *up to whole
+points* in the markup it emits — a 34.53 × 12.39 pt page is written
+`viewBox="0 0 35.000 13.000"` — and does not scale the contents to match, so the
+artwork sits in the corner of a slightly larger box. Anything positioned as a
+fraction of that box is therefore wrong, by more the smaller the equation: a
+point of slack is 12% of an 8 pt page. That is what drew the baseline guide half
+a point low, and it hid for so long because the metrics agree with themselves —
+a run's baseline *is* at exactly `height - depth` in those units, and the check
+that compared the guide against the metrics was comparing the bug with itself.
+`paint()` now restates the viewBox from the metrics. Measured before relying on
+it: the tight box clips no ink, in seven cases including 40 pt `cases`,
+matrices and radicals. The check now measures the guide against the baseline of
+the *painted* artwork, in screen pixels through `getScreenCTM`, so a mapping bug
+cannot pass by being self-consistent.
 
 **An operation that succeeded says nothing.** The equation appearing in the
 document is the feedback, and a panel that announces every success trains
