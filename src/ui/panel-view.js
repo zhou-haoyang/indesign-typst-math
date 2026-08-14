@@ -43,6 +43,33 @@ const VARIANTS = {
 };
 
 /**
+ * What the size and colour boxes show.
+ *
+ * On "Fixed" that is the state, which is what the user typed into them. On
+ * "Match text" they are disabled, and showing the value *underneath* them — the
+ * fixed one they are not going to use — was a quiet lie about what the next
+ * insert would do. So they show what the last render matched off the document
+ * instead; actions.js fills those two fields from the same resolution it builds
+ * the render request from, so the boxes and the artwork cannot disagree.
+ *
+ * The fallback is the fixed value, which covers the moment before the first
+ * preview has run. After that, a match with nothing to read is not empty:
+ * `resolveTypography` falls back to exactly these two, so the box still says
+ * what is about to be rendered.
+ *
+ * Measured before being relied on, since a refused write here would be silent:
+ * a disabled `<input>` in this host does take a `.value`, number and text
+ * alike, and the size box holds an off-step, out-of-range point size rather
+ * than clamping it (`min`/`max`/`step` bind the user, not the panel).
+ */
+const shownSize = (state) => (state.sizeMode === "auto" && state.matchedSizePt
+  ? state.matchedSizePt
+  : state.sizePt);
+const shownColor = (state) => (state.colorMode === "auto" && state.matchedColorText
+  ? state.matchedColorText
+  : state.colorText);
+
+/**
  * @param {object} store
  * @param {object} on  what to call when the user asks for something that needs
  *   InDesign or the compiler: preview, commit, revert, savePreamble,
@@ -132,15 +159,16 @@ function create(store, on) {
       widgets.toggleClass(el.revert, "hidden", !next.editing);
     }
 
-    if (changed(previous, next, "mode", "sizeMode", "sizePt", "colorMode", "colorText")) {
+    if (changed(previous, next, "mode", "sizeMode", "sizePt", "colorMode", "colorText",
+      "matchedSizePt", "matchedColorText")) {
       writeIfIdle(el.mode, next.mode);
       writeIfIdle(el.sizeMode, next.sizeMode);
-      writeIfIdle(el.sizePt, next.sizePt);
+      writeIfIdle(el.sizePt, shownSize(next));
       widgets.setDisabled(el.sizePt, next.sizeMode !== "fixed");
       writeIfIdle(el.colorMode, next.colorMode);
       // Same caret rule as the point size, and it bites harder here: every
       // character of `rgb("#c00")` is a state the poll could write back over.
-      writeIfIdle(el.colorText, next.colorText);
+      writeIfIdle(el.colorText, shownColor(next));
       widgets.setDisabled(el.colorText, next.colorMode !== "fixed");
     }
 
@@ -182,8 +210,15 @@ function create(store, on) {
       store.set({ mode: widgets.value(el.mode) });
       on.preview();
     });
+    // Switching to Fixed keeps the number that is on screen rather than reviving
+    // the one underneath it. On "Match text" the box shows what was matched, so
+    // the switch reads as "hold this value" — and snapping back to a size typed
+    // some time ago would look like the panel changing its mind about what it is
+    // about to insert. Read before the set, while the mode is still the old one.
     el.sizeMode.addEventListener("change", () => {
-      store.set({ sizeMode: widgets.value(el.sizeMode) });
+      const sizeMode = widgets.value(el.sizeMode);
+      const held = shownSize(store.get());
+      store.set(sizeMode === "fixed" ? { sizeMode, sizePt: held } : { sizeMode });
       on.preview();
     });
     el.sizePt.addEventListener("input", () => {
@@ -191,8 +226,13 @@ function create(store, on) {
       if (value > 0) store.set({ sizePt: value });
       on.preview();
     });
+    // As above, and more useful here: the matched colour arrives as a Typst
+    // expression, so switching to Fixed hands the user the swatch they were
+    // matching as something they can edit.
     el.colorMode.addEventListener("change", () => {
-      store.set({ colorMode: widgets.value(el.colorMode) });
+      const colorMode = widgets.value(el.colorMode);
+      const held = shownColor(store.get());
+      store.set(colorMode === "fixed" ? { colorMode, colorText: held } : { colorMode });
       on.preview();
     });
     // Stored verbatim, half-typed and all: `rgb("#c` is on the way to something

@@ -216,6 +216,13 @@ code is ESM.** They cannot share modules — `webview/template.js` is duplicated
 Python inside `tools/validate-template.py` on purpose, so the check is an
 independent implementation.
 
+That split is also why `colorLiteral` exists twice: `spec.colorExpression` is
+the panel's copy, needed because the "Match text" boxes now *show* the literal
+the template is about to emit. Two copies that must agree is not the same kind
+of duplication as the Python one, so `tools/test-spec.mjs` imports the real
+`webview/template.js` and holds them to each other — node loads it as it
+stands, being plain ESM.
+
 ### Surfaces, and why settings are split the way they are
 
 Three scopes, three homes, and the split is deliberate:
@@ -325,6 +332,18 @@ and a compile error belongs to the preview. It is emitted **parenthesised** into
 the `#set text(…)` line so that a stray comma cannot break out of the argument
 list and turn a colour error into a baffling one about the template.
 
+**On "Match text" the two boxes are readouts, not stale inputs.** They are
+disabled there, and they show what the last render resolved off the text —
+`24`, `cmyk(0%, 0%, 0%, 100%)` — because a box showing a fixed value the insert
+is not going to use is a quiet lie about what is about to happen. `matchedSizePt`
+and `matchedColorText` are separate state from `sizePt`/`colorText` on purpose:
+those hold what the user typed for "Fixed" and must survive a spell in "Match
+text" untouched. They are filled in `currentSpec`, from the same
+`resolveTypography` result the request is built from, so the box and the artwork
+cannot disagree — and they lag a moved cursor by the preview's own quarter
+second, which is the preview's lag, not a second one. Switching a control to
+"Fixed" adopts the value on screen rather than reviving the one underneath it.
+
 ### Editability
 
 A JSON record on the frame's script label (`src/id/label.js`) is the only source
@@ -430,6 +449,12 @@ application. The InDesign ones are demonstrated by
   parse** — assigning `rgb("#cc0000")` to one leaves it reading `""` — so
   copying the point-size field's markup for anything else empties the box with
   no error anywhere.
+  Two more, measured when the "Match text" boxes became readouts, so that a
+  refused write could not make that feature silently show a stale number:
+  **a `disabled` input still takes a `.value`** (number and text alike, decimals
+  included), and **`min`/`max`/`step` do not clamp a programmatic write** — the
+  point-size box holds 10.3 and 900 as readily as 10.5. Those attributes bind
+  the user, not the panel.
   How to test this again, since three obvious approaches do not work here:
   `getBoundingClientRect` returns 0x0 outside the visible flow, `constructor
   .name` is unavailable on every element, and `customElements.get` denies

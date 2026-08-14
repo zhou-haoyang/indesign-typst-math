@@ -92,7 +92,8 @@ function check(name, got, want) {
 
 const INITIAL = {
   tab: "equation", body: "", preamble: "", mode: "inline", sizeMode: "auto",
-  sizePt: 10, colorMode: "auto", colorText: "black", editing: null,
+  sizePt: 10, colorMode: "auto", colorText: "black",
+  matchedSizePt: null, matchedColorText: "", editing: null,
   lastMetrics: null, busy: false, preambleFromDefault: false,
   status: statusModule.EMPTY,
 };
@@ -185,6 +186,58 @@ function mount(overrides = {}) {
   const before = at("mode").writes;
   store.set({ sizePt: 12 });   // a change in the same render branch
   check("a control already showing the value is not rewritten", at("mode").writes, before);
+}
+
+/* ------------------------------------------------------------- match text */
+
+{
+  // On "Match text" both boxes are readouts: they show what the last render
+  // resolved off the document, not the fixed value sitting underneath them,
+  // which is not what an insert would use.
+  const store = mount({ sizePt: 10, colorText: 'rgb("#cc0000")' });
+  store.set({ matchedSizePt: 24, matchedColorText: "cmyk(0%, 0%, 0%, 100%)" });
+  check("the size box shows the size that was matched", at("size-pt").value, "24");
+  check("the colour box shows the colour that was matched",
+    at("color-text").value, "cmyk(0%, 0%, 0%, 100%)");
+  check("and both stay read-only",
+    [at("size-pt").disabled, at("color-text").disabled], [true, true]);
+  check("while the fixed values are left where they were",
+    [store.get().sizePt, store.get().colorText], [10, 'rgb("#cc0000")']);
+}
+
+{
+  // Fixed shows what the user typed, whatever the document happens to say.
+  const store = mount({ sizeMode: "fixed", colorMode: "fixed", sizePt: 11, colorText: "red" });
+  store.set({ matchedSizePt: 24, matchedColorText: "cmyk(0%, 0%, 0%, 100%)" });
+  check("a fixed size box keeps the user's number", at("size-pt").value, "11");
+  check("a fixed colour box keeps the user's expression", at("color-text").value, "red");
+}
+
+{
+  // Switching to Fixed holds the value on screen rather than reviving the one
+  // underneath it — otherwise the number jumps at the moment the user says
+  // "keep this one".
+  const store = mount({ sizePt: 10, colorText: "black" });
+  store.set({ matchedSizePt: 24, matchedColorText: 'rgb("#ff0000")' });
+
+  at("size-mode").value = "fixed";
+  at("size-mode").fire("change");
+  check("switching size to Fixed adopts what was matched", store.get().sizePt, 24);
+  check("so the box does not jump", at("size-pt").value, "24");
+
+  at("color-mode").value = "fixed";
+  at("color-mode").fire("change");
+  check("switching colour to Fixed hands over the matched expression",
+    store.get().colorText, 'rgb("#ff0000")');
+  check("now editable", at("color-text").disabled, false);
+}
+
+{
+  // Nothing matched yet — the panel has just opened — is not a reason to blank
+  // the boxes: the render falls back to these same two values.
+  mount({ sizePt: 12, colorText: "red" });
+  check("with nothing matched the fixed values stand in",
+    [at("size-pt").value, at("color-text").value], ["12", "red"]);
 }
 
 /* ------------------------------------------------------------------- tabs */

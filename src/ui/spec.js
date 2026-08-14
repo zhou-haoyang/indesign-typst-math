@@ -30,6 +30,63 @@ function typstColor(text) {
 }
 
 /**
+ * The Typst literal a colour descriptor renders as.
+ *
+ * A second copy of `colorLiteral` in webview/template.js, which is unavoidable
+ * — the panel is CommonJS and the webview is ESM, so the two cannot share a
+ * module — and load-bearing: the panel shows this in the colour box while it is
+ * on "Match text", so a divergence would tell the user one colour and render
+ * another. tools/test-spec.mjs builds a real source through the template and
+ * checks the two agree, which is what makes the duplication safe.
+ *
+ * One deliberate difference: a `{typst}` colour comes back as typed. The
+ * template parenthesises it so a stray comma cannot break out of the `#set
+ * text(…)` argument list; a box the text came from does not want the parens.
+ */
+function colorExpression(color) {
+  if (color && typeof color.typst === "string" && color.typst.trim()) return color.typst.trim();
+  if (!color || !color.values) return 'rgb("#000000")';
+  if (color.space === "CMYK") {
+    const [c, m, y, k] = color.values;
+    return `cmyk(${+c}%, ${+m}%, ${+y}%, ${+k}%)`;
+  }
+  if (color.space === "GRAY") return `luma(${Math.round((color.values[0] / 100) * 255)})`;
+  const [r, g, b] = color.values;
+  const hex = [r, g, b].map((v) => Math.max(0, Math.min(255, Math.round(v)))
+    .toString(16).padStart(2, "0")).join("");
+  return `rgb("#${hex}")`;
+}
+
+/**
+ * What the two "Match text" boxes should show.
+ *
+ * Both are read-only in that mode, so the only useful thing to put in them is
+ * the value the render is about to use — which is what `resolveTypography` has
+ * just decided, fallbacks and all. Taking it from there rather than from a
+ * second read of the document is the point: a box that disagreed with the
+ * artwork beside it would be worse than the stale number it replaces.
+ *
+ * A fixed control gets nothing, because it shows what the user typed. That
+ * text lives in `sizePt`/`colorText` and must survive a spell in "Match text"
+ * untouched, which is why these are fields of their own.
+ *
+ * Returned as scalars rather than one object: the store compares with
+ * Object.is, so a fresh object every preview would make every pass look like a
+ * change and write the controls while someone was in one.
+ */
+function matchedFrom(state, typography) {
+  return {
+    // Rounded because InDesign hands back the occasional 12.000000000000002 and
+    // the box is five characters wide. The render still uses the exact value;
+    // the two cannot differ by enough to see.
+    matchedSizePt: state.sizeMode === "auto"
+      ? Math.round(Number(typography.size) * 100) / 100
+      : null,
+    matchedColorText: state.colorMode === "auto" ? colorExpression(typography.color) : "",
+  };
+}
+
+/**
  * Does anything on screen need reading off the document?
  *
  * Asked before the read, so the caller can skip a DOM round trip entirely when
@@ -156,6 +213,6 @@ function stateFromRecord(record) {
 }
 
 module.exports = {
-  wantsContext, resolveTypography, toSpec, describeDiagnostics,
-  staleNote, stateFromRecord,
+  wantsContext, resolveTypography, colorExpression, matchedFrom, toSpec,
+  describeDiagnostics, staleNote, stateFromRecord,
 };

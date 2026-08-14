@@ -35,6 +35,14 @@ const store = createStore({
   colorMode: "auto",
   /** A Typst colour expression, used when colorMode is "fixed". */
   colorText: "black",
+  /**
+   * What the last render resolved off the text at the cursor, for the two boxes
+   * to show while they are on "Match text". Separate fields from the two above
+   * on purpose: those hold what the user typed for "Fixed", and matching some
+   * text is no reason to throw that away.
+   */
+  matchedSizePt: null,
+  matchedColorText: "",
   preamble: "",
   preambleDoc: null,
   /**

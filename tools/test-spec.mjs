@@ -17,6 +17,11 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// The webview's own module, imported rather than mirrored: the panel keeps a
+// copy of its colour literal, and this is where the two are held to each other.
+// Plain browser-free ESM, so node loads it as it stands.
+import { buildSource } from "../webview/template.js";
+
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const require = createRequire(import.meta.url);
 const spec = require(join(root, "src/ui/spec.js"));
@@ -115,6 +120,56 @@ check("both fixed needs no read at all",
   const at = { size: 24, color: RED };
   check("a read with no notes field does not throw",
     spec.resolveTypography(base, at, BLACK).notes, []);
+}
+
+/* ------------------------------------------------------ colorExpression */
+
+check("CMYK reads back as a Typst cmyk literal",
+  spec.colorExpression(BLACK), "cmyk(0%, 0%, 0%, 100%)");
+check("RGB reads back as hex", spec.colorExpression(RED), 'rgb("#ff0000")');
+check("grey reads back as luma", spec.colorExpression({ space: "GRAY", values: [50] }), "luma(128)");
+check("a typed colour comes back as typed, without the template's parens",
+  spec.colorExpression({ typst: ' rgb("#cc0000") ' }), 'rgb("#cc0000")');
+check("and no colour at all is black", spec.colorExpression(null), 'rgb("#000000")');
+
+{
+  // The panel holds a second copy of the template's `colorLiteral` — CommonJS
+  // and ESM cannot share a module — and the panel now *shows* its copy in the
+  // colour box. So the check that matters is not the format but that the two
+  // agree: a divergence would tell the user one colour and render another.
+  const emitted = (color) => {
+    const line = /fill: (.*?), top-edge/.exec(buildSource({ body: "x", color }).source);
+    return line && line[1];
+  };
+  for (const color of [BLACK, RED, { space: "RGB", values: [12, 34, 56] },
+    { space: "GRAY", values: [50] }, { space: "SOMETHING", values: [1, 2, 3] }, null]) {
+    check(`the template emits the same for ${JSON.stringify(color)}`,
+      emitted(color), spec.colorExpression(color));
+  }
+}
+
+/* --------------------------------------------------------- matchedFrom */
+
+{
+  const typography = { size: 24, color: RED, notes: [] };
+  check("a matched box reads back what the render resolved",
+    spec.matchedFrom(base, typography),
+    { matchedSizePt: 24, matchedColorText: 'rgb("#ff0000")' });
+  // A fixed box shows what the user typed, which lives elsewhere in the state
+  // and must survive a spell in "Match text" untouched.
+  check("a fixed box is left to the user's own text",
+    spec.matchedFrom({ ...base, sizeMode: "fixed", colorMode: "fixed" }, typography),
+    { matchedSizePt: null, matchedColorText: "" });
+  check("only the auto one of the pair is filled in",
+    spec.matchedFrom({ ...base, colorMode: "fixed" }, typography),
+    { matchedSizePt: 24, matchedColorText: "" });
+  check("an InDesign float is rounded to something the box can show",
+    spec.matchedFrom(base, { ...typography, size: 12.000000000000002 }).matchedSizePt, 12);
+  // With no text to read, resolveTypography falls back to the fixed values, so
+  // the box still shows what is about to be rendered.
+  check("a fallback is reported as faithfully as a match",
+    spec.matchedFrom(base, spec.resolveTypography(base, null, BLACK)),
+    { matchedSizePt: 10, matchedColorText: "cmyk(0%, 0%, 0%, 100%)" });
 }
 
 /* ------------------------------------------------------------- toSpec */

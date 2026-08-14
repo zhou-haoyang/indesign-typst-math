@@ -109,6 +109,12 @@ function create(store) {
     const at = spec.wantsContext(state) ? readContext() : null;
     const typography = spec.resolveTypography(state, at, context.BLACK);
     contextNotes = typography.notes;
+    // A control on "Match text" is a readout of what was matched, and this is
+    // the only place that knows: it is fed from the resolution the render is
+    // built from, not from a second read that could disagree with it. So the
+    // boxes track the preview exactly, including the quarter second it lags a
+    // moved cursor by.
+    store.set(spec.matchedFrom(state, typography));
     return spec.toSpec(state, typography);
   }
 
