@@ -43,9 +43,9 @@ in the text never moves.
 ### Settings
 
 The panel keeps the tight loop — type, look, insert — and everything else lives
-one step away. The **⚙** button and the panel's flyout menu (**≡**) both open
-**Settings**; the same actions are under **Plug-Ins ▸ Typst Math** so they work
-without the panel open.
+one step away. The panel's flyout menu (**≡**) opens **Settings**; the same
+actions are under **Plug-Ins ▸ Typst Math** so they work without the panel
+open.
 
 | Setting | Scope |
 | --- | --- |

@@ -101,7 +101,7 @@ try {
     } catch { /* nothing more to try; report what actually went wrong */ }
     setTimeout(() => fail(recovered
       ? `The panel flyout menu was refused (${message}), so it has been dropped. ` +
-        "Its actions are still on the ⚙ button and under Plug-Ins ▸ Typst Math."
+        "Settings and re-render are still under Plug-Ins ▸ Typst Math."
       : message), 0);
   }
 }

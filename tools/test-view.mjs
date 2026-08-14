@@ -106,7 +106,7 @@ function mount(overrides = {}) {
   }
   const store = createStore({ ...INITIAL, ...overrides });
   const handlers = {};
-  for (const name of ["preview", "commit", "revert", "settings", "savePreamble",
+  for (const name of ["preview", "commit", "revert", "savePreamble",
     "saveDefaultPreamble", "resetDefaultPreamble"]) {
     handlers[name] = () => calls.push(name);
   }
@@ -289,9 +289,6 @@ function mount(overrides = {}) {
 
   at("revert").fire("click");
   check("Revert reverts", calls.includes("revert"), true);
-
-  at("settings-toggle").fire("click");
-  check("the gear opens settings", calls.includes("settings"), true);
 }
 
 {

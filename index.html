@@ -13,34 +13,37 @@
 
 <body>
   <div class="panel">
-    <!-- The controls wrap inside their own box so that the gear stays pinned to
-         the top right instead of being pushed onto a row of its own. -->
-    <div class="toolbar">
-      <div class="controls">
-        <label class="field">
-          <sp-label>Style</sp-label>
-          <select id="mode">
-            <option value="inline">Inline</option>
-            <option value="display">Display</option>
-          </select>
-        </label>
-        <label class="field">
-          <sp-label>Size</sp-label>
-          <select id="size-mode">
-            <option value="auto">Match text</option>
-            <option value="fixed">Fixed</option>
-          </select>
-        </label>
+    <!-- One wrapping row of units, each a flex row of its own so that a label
+         never parts company with its picker when the row wraps — the point size
+         belongs to Size and used to be left stranded beside Colour. The widths
+         in panel.css give every unit the same label and picker columns, which is
+         what makes the wrapped rows line up under one another.
+
+         Settings is not here: it is on the flyout (≡) and under
+         Plug-Ins ▸ Typst Math, and a third route cost a whole column. -->
+    <div class="controls">
+      <label class="field">
+        <sp-label>Style</sp-label>
+        <select id="mode">
+          <option value="inline">Inline</option>
+          <option value="display">Display</option>
+        </select>
+      </label>
+      <label class="field">
+        <sp-label>Size</sp-label>
+        <select id="size-mode">
+          <option value="auto">Match text</option>
+          <option value="fixed">Fixed</option>
+        </select>
         <input type="number" id="size-pt" min="1" max="600" step="0.5" value="10" title="Point size" disabled>
-        <label class="field">
-          <sp-label>Colour</sp-label>
-          <select id="color-mode">
-            <option value="auto">Match text</option>
-            <option value="black">Black</option>
-          </select>
-        </label>
-      </div>
-      <button id="settings-toggle" class="icon" title="Settings">&#9881;</button>
+      </label>
+      <label class="field">
+        <sp-label>Colour</sp-label>
+        <select id="color-mode">
+          <option value="auto">Match text</option>
+          <option value="black">Black</option>
+        </select>
+      </label>
     </div>
 
     <!-- Tabs rather than a drawer: the preamble needs the live preview below it
@@ -178,8 +181,8 @@
               <option value="auto">Match text</option>
               <option value="fixed">Fixed</option>
             </select>
+            <input type="number" id="dlg-size-pt" min="1" max="600" step="0.5" value="10" title="Point size">
           </label>
-          <input type="number" id="dlg-size-pt" min="1" max="600" step="0.5" value="10" title="Point size">
         </div>
       </div>
 

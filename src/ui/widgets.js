@@ -74,9 +74,9 @@ function focus(element) {
  * UXP extends a plain `<button>` and `<select>` with `uxpVariant` / `uxpQuiet` /
  * `uxpSelected` rather than requiring `sp-button`, which is why these have
  * looked native all along — so this is the whole of what converting to the
- * Spectrum tags would buy, without giving up the CSS that sizes the icon
- * buttons (an `sp-*` widget's shadow root is closed, so `button.icon
- * { min-width }` would stop applying).
+ * Spectrum tags would buy, without giving up the CSS that sizes them (an
+ * `sp-*` widget's shadow root is closed, so `.font-list button { min-width }`
+ * would stop applying).
  *
  * Set as properties, since that is where they were found; the CSS fallbacks
  * stay in place in case a host does not honour them.

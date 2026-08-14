@@ -404,8 +404,8 @@ application. The InDesign ones are demonstrated by
   properties, which is why they render as Spectrum controls with no `sp-*` tag
   in sight. Setting those (see `applyButtonVariants` in `src/ui/panel.js`) is
   the whole of what converting to `sp-button` would buy, and it keeps the CSS
-  that sizes the icon buttons — an `sp-*` widget's shadow root is closed, so
-  `button.icon { min-width }` would stop applying.
+  that sizes them — an `sp-*` widget's shadow root is closed, so
+  `.font-list button { min-width }` would stop applying.
   Measured in this host, so as not to be re-probed: `sp-button`,
   `sp-action-button`, `sp-picker`, `sp-dropdown`, `sp-textfield` (including
   `type="number"` and `multiline`), `sp-textarea`, `sp-label` and `sp-checkbox`

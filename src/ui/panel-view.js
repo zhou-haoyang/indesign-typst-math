@@ -26,7 +26,7 @@ const IDS = {
   editor: "editor", preambleEditor: "preamble-editor",
   preview: "preview", status: "status", insert: "insert",
   revert: "revert", mode: "mode", sizeMode: "size-mode", sizePt: "size-pt",
-  colorMode: "color-mode", settingsToggle: "settings-toggle",
+  colorMode: "color-mode",
   tabEquation: "tab-equation", tabPreamble: "tab-preamble",
   preambleDot: "preamble-dot", preambleActions: "preamble-actions",
   preambleHint: "preamble-hint",
@@ -38,7 +38,6 @@ const IDS = {
 const VARIANTS = {
   insert: ["cta"],
   revert: ["secondary"],
-  settingsToggle: [null, true],
   preambleSaveDefault: ["secondary"],
   preambleResetDefault: ["secondary"],
 };
@@ -46,8 +45,10 @@ const VARIANTS = {
 /**
  * @param {object} store
  * @param {object} on  what to call when the user asks for something that needs
- *   InDesign or the compiler: preview, commit, revert, settings, savePreamble,
- *   saveDefaultPreamble, resetDefaultPreamble.
+ *   InDesign or the compiler: preview, commit, revert, savePreamble,
+ *   saveDefaultPreamble, resetDefaultPreamble. Settings is not among them: it
+ *   is reached from the flyout and the Plug-Ins menu, which panel.js dispatches
+ *   without going through the view.
  */
 function create(store, on) {
   const el = widgets.bind({}, IDS);
@@ -193,7 +194,6 @@ function create(store, on) {
 
     el.insert.addEventListener("click", () => on.commit());
     el.revert.addEventListener("click", () => on.revert());
-    el.settingsToggle.addEventListener("click", () => on.settings());
 
     el.tabEquation.addEventListener("click", () => switchTab("equation"));
     el.tabPreamble.addEventListener("click", () => switchTab("preamble"));

@@ -55,7 +55,8 @@ body {
    rule that works in Chrome and silently collapses in the host is worse than no
    rule, so the whole mechanism is avoided rather than used carefully. */
 .row,
-.statusbar {
+.statusbar,
+.controls {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -64,15 +65,13 @@ body {
 
 .row > *,
 .statusbar > *,
-.controls > *,
-.toolbar > * {
+.controls > * {
   margin-right: var(--space);
 }
 
 .row > :last-child,
 .statusbar > :last-child,
-.controls > :last-child,
-.toolbar > :last-child {
+.controls > :last-child {
   margin-right: 0;
 }
 
@@ -82,24 +81,14 @@ body {
   margin-bottom: 2px;
 }
 
-/* The gear stays on the first row; only .controls wraps. Left to one flex row,
-   the spacer pushed the gear onto a line of its own as soon as the four
-   controls no longer fitted, which is most docked widths. */
-.toolbar {
-  display: flex;
-  align-items: flex-start;
-  flex: 0 0 auto;
-  padding-bottom: var(--pad);
-}
-
+/* The appearance units, and the panel's own gap above the tab strip.
+   `flex: 0 0 auto` above is load-bearing here in a way it is not on a .row:
+   this box is a child of the panel's flex *column*, so a growing flex would
+   take height off the workspace rather than width along the row. It used to sit
+   inside a wrapper whose job was to keep the settings gear out of the wrap, and
+   there `flex: 1 1 auto` was the right answer to the opposite question. */
 .controls {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  flex: 1 1 auto;
-  /* Lets the row shrink below its content width so that it wraps rather than
-     pushing the gear along. */
-  min-width: 0;
+  padding-bottom: var(--pad);
 }
 
 .statusbar {
@@ -110,9 +99,18 @@ body {
   flex: 1 1 auto;
 }
 
+/* A unit — its label, its picker, and for Size the point box — is a flex item,
+   and a flex item is never split across lines. That is the whole of why the
+   point box now travels with Size: as a child of .controls in its own right it
+   was free to wrap on its own, and at most docked widths it did, landing beside
+   Colour or alone on a line as a number belonging to nothing.
+
+   Never shrinks either, so a unit that does not fit spills rather than being
+   squeezed out of column with the units above it. */
 .field {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
 }
 
 .field > sp-label {
@@ -132,10 +130,23 @@ body {
   display: block;
 }
 
-select {
-  min-width: 74px;
+/* What lines the units up when the row wraps, and the one number here that was
+   measured rather than chosen: on the panel at 2.5x, a picker whose widest
+   option is "Match text" comes out 100px and Style's ("Display") 80px, so the
+   stacked units agreed on their left edge and disagreed on their right. This
+   is the natural width of the widest of them, so it can only level the others
+   up to it — a picker is never asked to be narrower than its longest option,
+   which is what `width` here would have risked.
+
+   The label column needs no such rule: sp-label sizes itself, and all three
+   boxes already come out the same width whatever the word in them, which is
+   why the pickers have always started at the same x. */
+.field > select {
+  min-width: 100px;
 }
 
+/* No margin of its own: the host gives these controls about 6px of their own,
+   which is this panel's spacing already. */
 #size-pt,
 #dlg-size-pt {
   width: 58px;
@@ -299,14 +310,6 @@ select {
 
 button.cta {
   font-weight: bold;
-}
-
-/* Never shrinks, so it cannot be squeezed out of the toolbar by the controls
-   beside it. */
-button.icon {
-  flex: 0 0 auto;
-  min-width: 26px;
-  padding: 2px 6px;
 }
 
 .hidden {

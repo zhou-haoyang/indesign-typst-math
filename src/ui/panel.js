@@ -79,7 +79,6 @@ async function start() {
     preview: () => actions.requestPreview(),
     commit: () => actions.commit(),
     revert: () => actions.revert(),
-    settings: () => dialogs.showSettings(),
     savePreamble: () => actions.savePreamble(),
     saveDefaultPreamble: () => actions.saveDefaultPreamble(),
     resetDefaultPreamble: () => actions.resetDefaultPreamble(),
