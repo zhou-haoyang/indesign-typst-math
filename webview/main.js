@@ -19,6 +19,9 @@ const PT_TO_PX = 96 / 72;
 const MAX_SCALE = 4;
 
 let lastResult = null;
+/** The spec `lastResult` was rendered from; a repaint needs it as much as the
+ *  result, since the baseline guide is drawn for inline mode only. */
+let lastSpec = null;
 
 /* ------------------------------------------------------------------ bridge */
 
@@ -120,6 +123,10 @@ async function handle(msg) {
       break;
     case "theme":
       document.body.classList.toggle("dark", msg.theme === "dark");
+      // The legibility halo is chosen from the surface the artwork is drawn on,
+      // so the other theme may want it added or taken away. Nothing here needs
+      // recompiling: the halo lives in the painted SVG.
+      if (lastResult && lastResult.ok) paint(lastResult, lastSpec);
       break;
     case "fonts":
       try {
@@ -132,6 +139,7 @@ async function handle(msg) {
     case "render": {
       const res = await render(msg.spec, msg.want || {});
       lastResult = res;
+      lastSpec = msg.spec;
       paint(res, msg.spec);
       // The SVG is big and the panel never looks at it; keep it out of the wire.
       send({
@@ -147,6 +155,164 @@ async function handle(msg) {
     default:
       break;
   }
+}
+
+/* --------------------------------------------------------- legibility halo */
+
+/**
+ * The preview is the one place the artwork is seen against the panel's chrome
+ * rather than the page it is going onto, and the two can be the same brightness:
+ * black — InDesign's default ink — is all but invisible on the dark theme's
+ * #323232, and a light colour chosen for a dark page vanishes on the light one.
+ * So when the ink is too close to what it is drawn on, the preview outlines it.
+ *
+ * **This is a property of the preview, not of the equation.** It is added to the
+ * painted SVG, after the compile that produced the metrics and the PDF; those
+ * are already in hand and cannot see it, so what InDesign receives is unaffected
+ * by construction rather than by remembering to strip something out. The status
+ * line says so, because an outline nobody asked for otherwise reads as the
+ * equation having one.
+ */
+
+/** WCAG contrast ratio below which ink counts as too close to its background. */
+const HALO_BELOW = 3;
+/** Width of the outline, as a fraction of the em of the largest text. */
+const HALO_EM = 0.015;
+/** …but never so thin on screen that it may as well not be there (CSS px).
+ *  The preview fits the artwork to the stage, so a small expression and a large
+ *  one are drawn at much the same size and this floor is what most 10pt
+ *  equations actually get; the em term takes over for large type on a stage too
+ *  small to blow it up. */
+const HALO_MIN_PX = 1;
+const HALO_ID = "idt-halo";
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/** `#rgb`, `#rrggbb` (with or without alpha) or `rgb()`/`rgba()` -> [r, g, b]. */
+function parseColor(text) {
+  const t = String(text == null ? "" : text).trim();
+  const hex = /^#([0-9a-f]+)$/i.exec(t);
+  if (hex) {
+    const h = hex[1];
+    if (h.length === 3 || h.length === 4) return [0, 1, 2].map((i) => parseInt(h[i] + h[i], 16));
+    if (h.length === 6 || h.length === 8) return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+    return null;
+  }
+  const fn = /^rgba?\(([^)]*)\)/i.exec(t);
+  if (fn) {
+    const parts = fn[1].split(/[\s,/]+/).filter(Boolean).slice(0, 3).map(Number);
+    if (parts.length === 3 && parts.every((v) => Number.isFinite(v))) return parts;
+  }
+  return null;
+}
+
+/** Relative luminance, as WCAG defines it. */
+function luminance(rgb) {
+  const [r, g, b] = rgb.map((v) => {
+    const c = Math.min(255, Math.max(0, v)) / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function contrast(a, b) {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/**
+ * Every colour the artwork paints in. Glyph runs carry the ink as `fill` on
+ * their group; rules — fraction bars, radical bars, matrix lines — are stroked
+ * paths, so `stroke` counts too. Anything that is not a plain colour (`none`,
+ * a gradient's `url(…)`) drops out of `parseColor`.
+ */
+function inkColors(svg) {
+  const found = [];
+  for (const el of svg.querySelectorAll("[fill], [stroke]")) {
+    for (const attr of ["fill", "stroke"]) {
+      const color = parseColor(el.getAttribute(attr));
+      if (color) found.push(color);
+    }
+  }
+  return found;
+}
+
+/**
+ * Point size of the largest text in the artwork, measured off the artwork
+ * rather than taken from the spec: typst.ts lays each run out in a glyph space
+ * of 1000 units to the em and scales it by size/1000, so the transform *is* the
+ * size — including any the document preamble set for itself.
+ */
+function emPoints(svg, fallback) {
+  let biggest = 0;
+  for (const run of svg.querySelectorAll("g.typst-text")) {
+    const consolidated = run.transform && run.transform.baseVal.consolidate();
+    if (consolidated) biggest = Math.max(biggest, Math.abs(consolidated.matrix.a) * 1000);
+  }
+  return biggest > 0 ? biggest : fallback;
+}
+
+/**
+ * Draw `radiusPt` of `color` behind everything the artwork paints.
+ *
+ * One filter on the page group rather than a stroke on each element, because
+ * the artwork is not all glyphs: a fraction bar is a stroked path and cannot
+ * take a second stroke, and glyph outlines live in a glyph space of their own
+ * where a width in points means nothing. Dilating the alpha channel treats
+ * glyphs, rules and delimiters alike, and its radius is in the page's own
+ * units, which are points.
+ */
+function addHalo(svg, color, radiusPt) {
+  const make = (name, attrs) => {
+    const el = document.createElementNS(SVG_NS, name);
+    for (const key of Object.keys(attrs)) el.setAttribute(key, attrs[key]);
+    return el;
+  };
+  // sRGB, not the linearRGB filters default: the halo is a flat colour picked
+  // to contrast in the space the panel is painted in, not in a linear one.
+  const filter = make("filter", { id: HALO_ID, "color-interpolation-filters": "sRGB" });
+  filter.appendChild(make("feMorphology", {
+    in: "SourceAlpha", operator: "dilate", radius: radiusPt, result: "fattened",
+  }));
+  filter.appendChild(make("feFlood", { "flood-color": color, result: "wash" }));
+  filter.appendChild(make("feComposite", {
+    in: "wash", in2: "fattened", operator: "in", result: "halo",
+  }));
+  const merge = make("feMerge", {});
+  merge.appendChild(make("feMergeNode", { in: "halo" }));
+  merge.appendChild(make("feMergeNode", { in: "SourceGraphic" }));
+  filter.appendChild(merge);
+
+  const defs = make("defs", {});
+  defs.appendChild(filter);
+  svg.insertBefore(defs, svg.firstChild);
+  for (const page of svg.querySelectorAll("g.typst-page")) {
+    page.setAttribute("filter", `url(#${HALO_ID})`);
+  }
+}
+
+/**
+ * Outline the artwork if any of its ink is too close to the panel's own
+ * background, and say whether it did.
+ *
+ * The halo is the theme's *text* colour, which contrasts with the background by
+ * construction — and so with ink that was close enough to it to need this.
+ *
+ * @param {SVGElement} svg
+ * @param {number} pxPerPt How large the artwork is being drawn, so that a halo
+ *   in points can be kept visible on screen.
+ */
+function haloIfNeeded(svg, pxPerPt) {
+  const surface = getComputedStyle(document.body);
+  const background = parseColor(surface.backgroundColor);
+  if (!background) return false;
+  const worst = inkColors(svg)
+    .reduce((lowest, ink) => Math.min(lowest, contrast(ink, background)), Infinity);
+  if (!(worst < HALO_BELOW)) return false;
+  addHalo(svg, surface.color, Math.max(
+    HALO_EM * emPoints(svg, 10),
+    pxPerPt > 0 ? HALO_MIN_PX / pxPerPt : 0,
+  ));
+  return true;
 }
 
 /* ----------------------------------------------------------------- preview */
@@ -181,11 +347,13 @@ function paint(res, spec) {
   art.style.height = `${hPx * scale}px`;
   art.innerHTML = res.svg;
   const svg = art.querySelector("svg");
+  let haloed = false;
   if (svg) {
     svg.setAttribute("width", "100%");
     svg.setAttribute("height", "100%");
     svg.style.width = "100%";
     svg.style.height = "100%";
+    haloed = haloIfNeeded(svg, PT_TO_PX * scale);
   }
 
   // The one thing worth seeing before you commit: where the maths baseline is
@@ -203,8 +371,11 @@ function paint(res, spec) {
   const m = res.metrics;
   statusEl.className = "";
   // Size only: depth is what the placement turns on, but as a number on screen
-  // it explains nothing the dashed baseline guide does not already show.
-  statusEl.textContent = `${m.width.toFixed(2)} × ${m.height.toFixed(2)} pt`;
+  // it explains nothing the dashed baseline guide does not already show. The
+  // outline is the exception — it is a visible change to the artwork that the
+  // document will not have, so it is worth a note.
+  statusEl.textContent = `${m.width.toFixed(2)} × ${m.height.toFixed(2)} pt` +
+    (haloed ? " · outlined for contrast (preview only)" : "");
 }
 
 /**
@@ -226,7 +397,7 @@ let resizeTimer = null;
 window.addEventListener("resize", () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
-    if (lastResult && lastResult.ok) paint(lastResult, { mode: lastResult.mode });
+    if (lastResult && lastResult.ok) paint(lastResult, lastSpec);
   }, 80);
 });
 

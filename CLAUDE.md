@@ -177,6 +177,32 @@ string it shows at rest. It is never blank: `tools/smoke-preview.mjs` checks
 that of every failing case, along with the two lines differing, and pins the
 fallback on the empty one.
 
+**The preview outlines ink it would otherwise hide.** It is the one place the
+artwork is seen against the panel's chrome rather than the page it is going
+onto, and the two can be the same brightness: black — InDesign's default ink —
+is all but invisible on the dark theme's `#323232`. So when any ink falls below
+a WCAG contrast of 3 against `document.body`'s background, `paint()` draws a
+thin outline of the theme's *text* colour behind the artwork, and the status
+line says `· outlined for contrast (preview only)` — an outline nobody asked for
+otherwise reads as the equation having one.
+
+Three measured facts shape how, and each was probed rather than assumed:
+typst.ts resolves the fill into the SVG (`#dc0000`, whatever the user typed in
+the colour box), so the ink is read off the painted markup and a `{typst}`
+expression needs no evaluating; a rule — a fraction bar, a radical bar — is a
+*stroked* path and cannot take a second stroke, while glyph outlines live in a
+glyph space of their own, which is why this is one `feMorphology` dilate on
+`g.typst-page` (whose units are points) and not a stroke per element; and each
+text run is scaled by `size/1000` from a glyph space of 1000 units to the em, so
+the run transforms give the point size the artwork was actually drawn at,
+preamble overrides included, and the outline is `0.015em` of that.
+
+**It is added to the painted SVG, after the compile that produced the metrics
+and the PDF.** That is what makes it preview-only by construction rather than by
+remembering to strip it out, and `tools/smoke-preview.mjs` pins it: the same
+expression is rendered in both themes, the outline has to appear in one and not
+the other, and the two PDFs have to be byte-identical.
+
 **An operation that succeeded says nothing.** The equation appearing in the
 document is the feedback, and a panel that announces every success trains
 people to ignore the line the failures also arrive on. So the status line

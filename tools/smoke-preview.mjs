@@ -5,8 +5,9 @@
  *
  * This is the part that cannot be tested from InDesign without a human looking
  * at it: that a render request comes back with metrics and PDF bytes, that the
- * preview actually draws an SVG, and that the baseline guide lands where the
- * reported depth says it should.
+ * preview actually draws an SVG, that the baseline guide lands where the
+ * reported depth says it should, and that the legibility outline appears on the
+ * ink that needs it and never reaches the PDF.
  *
  *   node tools/smoke-preview.mjs
  */
@@ -31,12 +32,27 @@ const CASES = [
   { name: "dollar-wrapped", spec: { body: "$x^2$", mode: "inline", size: 10 }, want: {} },
 ];
 
+/**
+ * The legibility outline is chosen from the ink against the panel's own
+ * background, so the same expression wants it in one theme and not the other —
+ * and the artwork InDesign receives must be identical either way.
+ */
+const HALO_CASES = [
+  { name: "black ink", spec: { body: "x/2", mode: "inline", size: 10 }, haloIn: "dark" },
+  { name: "white ink", spec: { body: "x/2", mode: "inline", size: 10, color: { typst: "white" } }, haloIn: "light" },
+  // Read after a theme repaint rather than after the render, and so also the
+  // check that a repaint still knows what it drew: it is handed the spec, not
+  // the result, and a display equation has no baseline to guide.
+  { name: "display ink", spec: { body: "x/2", mode: "display", size: 12 }, haloIn: "dark" },
+];
+
 const DRIVER = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
   html,body{margin:0;height:100%} iframe{width:420px;height:260px;border:0}
 </style></head><body>
 <iframe id="wv" src="./webview/index.html"></iframe>
 <script type="module">
 const cases = ${JSON.stringify(CASES)};
+const haloCases = ${JSON.stringify(HALO_CASES)};
 const wv = document.getElementById("wv");
 const out = [];
 const inbox = [];
@@ -108,6 +124,35 @@ try {
       diagnostics: reply.diagnostics || [], painted,
     });
   }
+
+  for (const c of haloCases) {
+    for (const theme of ["light", "dark"]) {
+      post({ type: "theme", theme });
+      const mine = id++;
+      post({ id: mine, type: "render", spec: c.spec, want: { pdf: true } });
+      const reply = await waitFor((m) => m.id === mine && m.type === "result", 60000);
+      // Repaint before looking: same theme, so nothing about the expectations
+      // changes, but everything read below comes from the path a theme switch
+      // takes — which has only the stored spec to work from.
+      post({ type: "theme", theme });
+      await new Promise((r) => setTimeout(r, 50));
+      const doc = wv.contentDocument;
+      const flood = doc.querySelector("#art filter#idt-halo feFlood");
+      const dilate = doc.querySelector("#art filter#idt-halo feMorphology");
+      out.push({
+        step: "halo", name: c.name, theme,
+        outlined: !!doc.querySelector("#art g.typst-page[filter]"),
+        color: flood && flood.getAttribute("flood-color"),
+        radius: dilate && +dilate.getAttribute("radius"),
+        background: getComputedStyle(doc.body).backgroundColor,
+        status: (doc.getElementById("status") || {}).textContent || "",
+        guide: !!doc.getElementById("baseline"),
+        // Whole-artwork identity, not a length: this is the check that the
+        // outline stops at the preview.
+        pdf: reply.pdfBase64 || null,
+      });
+    }
+  }
 } catch (e) {
   out.push({ fatal: String((e && e.stack) || e) });
 }
@@ -140,7 +185,7 @@ if (!rebuild || rebuild.step !== "rebuild" || !rebuild.ok) {
   console.log(`rebuild after font change: ok (${rebuild.fontCount} extra fonts)\n`);
 }
 
-for (const row of rows) {
+for (const row of rows.filter((r) => !r.step)) {
   if (row.fatal) { console.error("FATAL:", row.fatal); failures++; continue; }
   const expected = CASES.find((c) => c.name === row.name);
   const p = row.painted;
@@ -206,6 +251,46 @@ for (const row of rows) {
       fail(`baseline guide at ${(gotFrac * 100).toFixed(1)}% but depth implies ${(wantFrac * 100).toFixed(1)}%`);
     }
   }
+}
+
+/* The legibility outline: on the ink that needs it, in the theme that needs it,
+   and never in what gets placed. */
+console.log("\nlegibility outline");
+
+/**
+ * The same source exports the same PDF byte for byte — measured — except for
+ * the second it was made in, which Typst stamps into `/ModDate` and
+ * `/CreationDate`. Two renders a moment apart straddle a second often enough
+ * that comparing the raw bytes fails about a third of the time.
+ */
+const undated = (b64) => atob(b64).replace(/\/(?:Mod|Creation)Date \(D:[^)]*\)/g, "");
+for (const c of HALO_CASES) {
+  const shots = rows.filter((r) => r.step === "halo" && r.name === c.name);
+  if (shots.length !== 2) { fail(`${c.name}: expected both themes, got ${shots.length}`); continue; }
+  for (const shot of shots) {
+    const want = shot.theme === c.haloIn;
+    const says = / · outlined for contrast \(preview only\)$/.test(shot.status);
+    console.log(`   ${c.name} on ${shot.theme}: ${shot.outlined
+      ? `outlined ${shot.color} at ${shot.radius.toFixed(3)}pt on ${shot.background}`
+      : `plain on ${shot.background}`}`);
+    if (shot.outlined !== want) {
+      fail(`${c.name} on the ${shot.theme} theme should ${want ? "" : "not "}be outlined`);
+    }
+    // The stage and the status line have to agree about it, or the outline
+    // reads as something the equation itself has.
+    if (says !== want) fail(`${c.name} on ${shot.theme}: status line says ${JSON.stringify(shot.status)}`);
+    if (!/^\d+\.\d\d × \d+\.\d\d pt/.test(shot.status)) {
+      fail(`${c.name} on ${shot.theme}: the note displaced the size (${JSON.stringify(shot.status)})`);
+    }
+    if (shot.guide !== (c.spec.mode !== "display")) {
+      fail(`${c.name} on ${shot.theme}: repaint ${shot.guide ? "drew" : "lost"} the baseline guide`);
+    }
+  }
+  const [a, b] = shots;
+  if (!a.pdf || !b.pdf) fail(`${c.name}: no PDF to compare across themes`);
+  else if (undated(a.pdf) !== undated(b.pdf)) {
+    fail(`${c.name}: the outline changed the placed artwork`);
+  } else console.log(`   ${c.name}: identical PDF in both themes (${atob(a.pdf).length} B)`);
 }
 
 // Pasting `$x^2$` from a Typst document must render identically to typing `x^2`.
